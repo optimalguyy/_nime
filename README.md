@@ -352,7 +352,8 @@ picked, not whichever track the stream lists first.
 
 Episodes are fetched as several pieces at once rather than one at a time, which
 on a typical connection is most of the difference between a two minute download
-and a four minute one.
+and a four minute one. If a server starts refusing that many requests, the
+download carries on over a single connection rather than failing.
 
 While an episode downloads you get one line that updates in place — a bar, the
 percentage, the speed and the time left — and if a download fails it says why

@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.4"
+version="1.8.5"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1251,22 +1251,27 @@ download_video() {
 	if command -v yt-dlp >/dev/null 2>&1; then
 		# the progress lines become one bar, everything else goes to a log so a
 		# failure can say what actually went wrong
-		(
-			# the stream is a list of small fragments and yt-dlp fetches them one at
-			# a time by default, which leaves the line idle; a handful in flight at
-			# once roughly doubles the speed, and the retries ride out the rate
-			# limiting that more than that provokes
-			yt-dlp --newline --progress --referer "$refr" -f "$_fmt" --merge-output-format mp4 \
-				-N 4 --fragment-retries 20 --retries 10 --retry-sleep 2 \
-				-o "$_tmpd/raw.%(ext)s" "$video_link" 2>&1
-			printf 'rc=%s\n' "$?" >"$_tmpd/rc"
-		) | while IFS= read -r _line; do
-			printf '%s\n' "$_line" >>"$_tmpd/ytdl.log"
-			draw_progress "$_line" || :
+		# the stream is a list of small fragments and yt-dlp fetches them one at a
+		# time by default, which leaves the line idle: a few at once is most of
+		# the speed. Servers throttle that though, so a download that runs into
+		# "too many requests" is tried again on one connection, which always works
+		for _n in 4 1; do
+			(
+				yt-dlp --newline --progress --referer "$refr" -f "$_fmt" --merge-output-format mp4 \
+					-N "$_n" --fragment-retries 15 --retries 10 --retry-sleep fragment:exp=1:30 \
+					-o "$_tmpd/raw.%(ext)s" "$video_link" 2>&1
+				printf 'rc=%s\n' "$?" >"$_tmpd/rc"
+			) | while IFS= read -r _line; do
+				printf '%s\n' "$_line" >>"$_tmpd/ytdl.log"
+				draw_progress "$_line" || :
+			done
+			printf '\r\033[2K' >&2
+			_rc=$(sed -n 's/^rc=//p' "$_tmpd/rc" 2>/dev/null)
+			[ "$_rc" = 0 ] && { _ok=1; break; }
+			# only a throttled server is worth a slower second try
+			grep -q '429\|Too Many Requests' "$_tmpd/ytdl.log" 2>/dev/null || break
+			info "Server is limiting requests, continuing on a single connection..."
 		done
-		printf '\r\033[2K' >&2
-		_rc=$(sed -n 's/^rc=//p' "$_tmpd/rc" 2>/dev/null)
-		[ "$_rc" = 0 ] && _ok=1
 	elif command -v ffmpeg >/dev/null 2>&1; then
 		ffmpeg -loglevel error -referer "$refr" -i "$video_link" \
 			-c copy -bsf:a aac_adtstoasc "$_tmpd/raw.mp4" && _ok=1
