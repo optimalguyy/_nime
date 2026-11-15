@@ -2,8 +2,9 @@
 
 `_nime` is a terminal client for watching anime. Search for a show, pick an
 episode from a list, and it resolves the stream and hands it to your player.
-It reads an anime streaming site, talks to its player directly — including the
-encrypted stream payload — and runs as a single POSIX shell script with no
+It reads [animesuge.cz](https://animesuge.cz) and
+[anichan.to](https://anichan.to), talks to their player directly — including
+the encrypted stream payload — and runs as a single POSIX shell script with no
 runtime, no build step and no installer.
 
 Everything happens in the terminal: you search, you pick an anime and an
@@ -141,7 +142,9 @@ Found it dubbed: <title>
 ```
 
 The switch only happens when the title actually matches, so it never lands you
-on a different show. If no source has a dub, it says so and plays the subbed version. Add `--sub` to ask for subs from the start.
+on a different show. The two sites behind it are
+[animesuge.cz](https://animesuge.cz) and [anichan.to](https://anichan.to): when
+one has no dub for a show, the other is checked before falling back to subs. If no source has a dub, it says so and plays the subbed version. Add `--sub` to ask for subs from the start.
 
 Each audio language has its own flag: `-engdub`, `-gerdub`, `-spadub`,
 `-fredub`, `-itadub`, `-pordub`, `-rusdub` and `-aradub`. Only English dubs are
@@ -168,7 +171,7 @@ _nime -e 1-3 "<title>"
 The other site:
 
 ```sh
-_nime -s 2 "<title>"
+_nime -s 2 "<title>"     # anichan.to
 ```
 
 Skip openings and endings automatically:
@@ -256,7 +259,7 @@ failing.
 
 | flag | meaning |
 | --- | --- |
-| `-s, --source <n>` | which site to use: `1` (default) or `2` |
+| `-s, --source <n>` | which site to use: `1` ([animesuge.cz](https://animesuge.cz), default) or `2` ([anichan.to](https://anichan.to)) |
 | `-c, --continue` | continue from history |
 | `-d, --download` | download instead of playing |
 | `-D, --delete` | delete history |
@@ -283,7 +286,7 @@ failing.
 
 | variable | meaning |
 | --- | --- |
-| `_NIME_SOURCE` | which site to use: `1` (default) or `2` |
+| `_NIME_SOURCE` | which site to use: `1` (animesuge.cz, default) or `2` (anichan.to) |
 | `_NIME_MODE` | `dub` (default) or `sub` |
 | `_NIME_QUALITY` | default quality |
 | `_NIME_PLAYER` | player command to use |
