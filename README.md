@@ -355,6 +355,9 @@ on a typical connection is most of the difference between a two minute download
 and a four minute one. If a server starts refusing that many requests, the
 download carries on over a single connection rather than failing.
 
+Ctrl+C stops the whole run, even halfway through a range, rather than finishing
+the episode and moving on to the next one.
+
 While an episode downloads you get one line that updates in place — a bar, the
 percentage, the speed and the time left — and if a download fails it says why
 instead of just stopping.

@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.5"
+version="1.8.6"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1809,7 +1809,19 @@ case "$player_function" in
 	*) dep_ch "$player_function" ;;
 esac
 
-trap 'player_stop; tput sgr0 2>/dev/null; rm -f "${histfile}.new"' INT HUP TERM
+# ctrl-c stops the whole run, not just the episode in front of it: without the
+# exit the handler returns and the episode loop carries on to the next one
+on_interrupt() {
+	trap - INT HUP TERM
+	printf '\r\033[2K' >&2
+	player_stop
+	[ -n "${_tmpd:-}" ] && [ -d "$_tmpd" ] && rm -rf "$_tmpd"
+	rm -f "${histfile}.new"
+	tput sgr0 2>/dev/null
+	printf '\033[1;33mStopped\033[0m\n' >&2
+	exit 130
+}
+trap on_interrupt INT HUP TERM
 
 info "_nime $version"
 
