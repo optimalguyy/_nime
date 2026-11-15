@@ -51,25 +51,121 @@ never installs anything for you.
 
 ## Install
 
-`_nime` is one script, and `_nime-dl` is a two-line wrapper around it. Put both
-anywhere on your `PATH`.
+`_nime` is one shell script plus a two line wrapper. Installing it means putting
+those two files where your shell looks; there is nothing to build and nothing
+keeps running.
+
+1. install the packages for your system
+2. copy the two scripts into a folder on your `PATH`
+3. check that it worked
+
+### 1. Packages
+
+**Arch, CachyOS, Manjaro, EndeavourOS**
 
 ```sh
-git clone https://github.com/USERNAME/_nime.git
+sudo pacman -S --needed curl openssl mpv fzf python3 yt-dlp ffmpeg
+```
+
+**Debian, Ubuntu, Mint, Pop!_OS**
+
+```sh
+sudo apt update
+sudo apt install curl openssl mpv fzf python3 yt-dlp ffmpeg
+```
+
+**Fedora**
+
+```sh
+sudo dnf install curl openssl mpv fzf python3 yt-dlp ffmpeg
+```
+
+**openSUSE**
+
+```sh
+sudo zypper install curl openssl mpv fzf python3 yt-dlp ffmpeg
+```
+
+**macOS** (with [Homebrew](https://brew.sh))
+
+```sh
+brew install mpv fzf python3 yt-dlp ffmpeg
+```
+
+IINA is used when it is installed, otherwise mpv:
+
+```sh
+brew install --cask iina
+```
+
+**Windows, Git Bash** ([Git for Windows](https://git-scm.com/download/win), with
+[Scoop](https://scoop.sh))
+
+```sh
+scoop install mpv fzf python yt-dlp ffmpeg
+```
+
+**Windows, WSL2** — run the Debian lines above *inside* WSL and install a Linux
+player there too; `mpv.exe` on the Windows side is not reachable from inside it.
+
+**Android, Termux** ([F-Droid](https://f-droid.org/packages/com.termux/))
+
+```sh
+pkg update
+pkg install git curl openssl mpv fzf python termux-am
+pkg install yt-dlp ffmpeg      # only needed for downloads
+```
+
+Then install the mpv app from F-Droid as well: `_nime` hands the stream over to
+it. VLC works too with `_nime -v`.
+
+**iOS, iSH** (App Store)
+
+```sh
+apk add git curl openssl
+```
+
+There is no player inside iSH, so `_nime` prints a tappable `vlc://` link
+instead — install VLC from the App Store and tap it.
+
+Only `curl`, `openssl`, `sed`, `grep` and `awk` are required. Everything else
+buys you a menu, a player or downloads, and `_nime` says what it is missing
+rather than failing.
+
+### 2. Get the files
+
+```sh
+git clone https://github.com/optimalguyy/_nime.git
 cd _nime
 mkdir -p ~/.local/bin
 cp _nime _nime-dl ~/.local/bin/
 chmod +x ~/.local/bin/_nime ~/.local/bin/_nime-dl
 ```
 
-Make sure `~/.local/bin` is on your `PATH`:
+`~/.local/bin` is already on the `PATH` on most Linux desktops. If `_nime` is
+not found afterwards, add the folder once, for your shell:
 
 ```sh
-# add to ~/.bashrc or ~/.zshrc
-export PATH="$HOME/.local/bin:$PATH"
+# bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+
+# zsh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+
+# fish
+fish_add_path ~/.local/bin
 ```
 
-For a system wide install, use `/usr/local/bin` instead:
+On **Windows Git Bash** use `~/bin` in place of `~/.local/bin` and add it the
+same way:
+
+```sh
+mkdir -p ~/bin
+cp _nime _nime-dl ~/bin/
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+```
+
+A system wide copy works too, for every user on the machine:
 
 ```sh
 sudo cp _nime _nime-dl /usr/local/bin/
@@ -82,16 +178,25 @@ sudo cp _nime.1 /usr/local/share/man/man1/
 sudo mandb
 ```
 
+### 3. Check it
+
+```sh
+_nime --check-deps
+_nime -V
+```
+
+The first command lists every dependency as `ok` or `absent`, so you can see
+what is still missing instead of guessing. The second prints the version.
+
 ### Update
 
 ```sh
 _nime -U
 ```
 
-That fetches `_nime` from this repository, compares the version line, and
-replaces the installed copy while keeping the old one as `_nime.bak`. Set
-`repo_user` at the top of the script to your GitHub username once, or export
-`_NIME_USER` / `_NIME_BRANCH`.
+That downloads the newest copy, compares the version line, and replaces the
+installed file while keeping the old one next to it as `_nime.bak`. It needs
+`_nime` to be on your `PATH` so it can find itself.
 
 ## Commands
 

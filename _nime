@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.7.0"
+version="1.7.1"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -22,7 +22,7 @@ api_base="https://api.github.com/repos/${repo_user}/_nime/contents"
 
 TAB=$(printf '\t')
 req_deps="curl sed grep awk openssl"
-opt_deps="fzf mpv vlc yt-dlp ffmpeg syncplay"
+opt_deps="fzf mpv vlc yt-dlp ffmpeg syncplay python3"
 
 # ---------------------------------------------------------------------------
 # output helpers
