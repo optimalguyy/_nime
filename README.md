@@ -272,11 +272,15 @@ Subtitles for episode 1:
 Then pick one, either by language code or by name:
 
 ```sh
-_nime -d -e 1 --sub-lang ger "<title>"    # German only
-_nime -d -e 1 --sub-lang german "<title>" # same thing
-_nime --sub-lang spa "<title>"            # play with Spanish subtitles
-_nime -d -e 1 --sub-lang all "<title>"    # embed all nine tracks
+_nime-dl "<title>" -e 1 -gersub   # German subtitles only
+_nime "<title>" -spasub           # play with Spanish subtitles
+_nime-dl "<title>" -e 1 -allsub   # embed every track
 ```
+
+Every language has its own flag: `-engsub`, `-gersub`, `-fresub`, `-spasub`,
+`-itasub`, `-porsub`, `-rusub`, `-arasub`, and `-allsub` for all of them.
+They are short for `--sub-lang <code>`, which also takes a full name
+(`--sub-lang german`) and `all`.
 
 Without the flag you get the track the source marks as default, which is
 English here. With `--sub-lang all` every track is muxed in and flagged
@@ -301,6 +305,8 @@ failing.
 | `--dub` | dubbed audio (**default**) |
 | `-engdub` | English dub (same as `--dub`) |
 | `-gerdub` `-spadub` `-fredub` `-itadub` `-pordub` `-rusdub` `-aradub` | that language's dub, when a source has one |
+| `-engsub` `-gersub` `-spasub` `-fresub` `-itasub` `-porsub` `-rusub` `-arasub` | subtitles in that language, short for `--sub-lang` |
+| `-allsub` | every subtitle track, short for `--sub-lang all` |
 | `--sub` | subtitled instead of dubbed |
 | `--skip` | skip intros and outros (mpv) |
 | `--sub-lang <lang>` | subtitle language, as a code (`eng`, `ger`, `spa`) or a name (`german`); `all` embeds every track when downloading |

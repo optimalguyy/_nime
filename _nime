@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.5.0"
+version="1.5.1"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -88,6 +88,9 @@ help_info() {
 	  -engdub           English dub (same as --dub)
 	  -gerdub, -spadub, -fredub, -itadub, -pordub, -rusdub, -aradub
 	                    That language's dub, when a source has one
+	  -engsub, -gersub, -spasub, -fresub, -itasub, -porsub, -rusub,
+	  -arasub           Subtitles in that language (short for --sub-lang)
+	  -allsub           Every subtitle track, when downloading
 	  --sub             Play the subbed version
 	  --sub-lang <lang> Subtitles to use, a code (eng, ger, spa) or a name
 	                    (german). With --download, "all" embeds every track
@@ -1468,6 +1471,14 @@ while [ $# -gt 0 ]; do
 			[ $# -lt 2 ] && die "missing argument!"
 			sub_lang=$2
 			shift
+			;;
+		-engsub | --engsub | -gersub | --gersub | -fresub | --fresub | -spasub | --spasub | \
+			-itasub | --itasub | -porsub | --porsub | -rusub | --rusub | -arasub | --arasub | \
+			-allsub | --allsub)
+			# one flag per subtitle language, e.g. -gersub: keep the language part
+			_sub_flag="${1#--}"
+			sub_lang="${_sub_flag#-}"
+			sub_lang="${sub_lang%sub}"
 			;;
 		--list-subs) list_subs=1 ;;
 		--no-detach) no_detach=1 ;;
