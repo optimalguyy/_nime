@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.1.1"
+version="1.2.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -68,7 +68,8 @@ help_info() {
 	  -v, --vlc         Use VLC to play the video
 	  -V, --version     Show the version of the script
 	  -h, --help        Show this help message and exit
-	  --dub             Play the dubbed version (default)
+	  --dub             Dubbed audio (default); other sites are tried if this
+	                    one has no dub
 	  --sub             Play the subbed version
 	  --sub-lang <lang> Subtitles to use, a code (eng, ger, spa) or a name
 	                    (german). With --download, "all" embeds every track
@@ -300,7 +301,7 @@ as_episode_maps() {
 			_sub=$(printf '%s' "$_rec" | sed -nE 's|.*data-sub="([01])".*|\1|p')
 			_dub=$(printf '%s' "$_rec" | sed -nE 's|.*data-dub="([01])".*|\1|p')
 			{ [ -z "$_ep" ] || [ -z "$_ids" ]; } && continue
-			if [ "$mode" = dub ]; then
+			if [ "${2:-$mode}" = dub ]; then
 				[ "$_dub" = 1 ] || continue
 			else
 				[ "$_sub" = 1 ] || continue
@@ -364,6 +365,98 @@ ac_episode_maps() {
 		printf '%s\t-\n' "$_i"
 		_i=$((_i + 1))
 	done
+}
+
+# ---------------------------------------------------------------------------
+# dub availability
+# ---------------------------------------------------------------------------
+
+# animesuge marks every episode with data-sub / data-dub, so one request tells
+# us whether the show is dubbed at all
+as_has_dub() {
+	_id=$(as_anime_id "$1") || return 1
+	[ -z "$_id" ] && return 1
+	[ -n "$(as_episode_maps "$_id" dub 2>/dev/null | head -n 1)" ]
+}
+
+# anichan does not publish the flags, so ask the player for the dub of episode
+# one and see whether it hands back a playlist
+ac_has_dub() {
+	_embed="https://megaplay.buzz/stream/ani/$1/1/dub"
+	_page=$(curl -sSL -A "$agent" --max-time 12 -e "$base_ac" "$_embed" 2>/dev/null)
+	_fid=$(printf '%s' "$_page" | grep -oE 'data-id="[0-9]+"' | head -n 1 | grep -oE '[0-9]+')
+	[ -z "$_fid" ] && return 1
+	_src=$(curl -sSL -A "$agent" --max-time 12 -e "$_embed" \
+		-H "X-Requested-With: XMLHttpRequest" \
+		"https://megaplay.buzz/stream/getSourcesNew?id=$_fid" 2>/dev/null)
+	[ -z "$_src" ] && return 1
+	_src=$(printf '%s' "$_src" | unescape)
+	_enc=$(printf '%s' "$_src" | sed -nE 's|.*"enc":[[:space:]]*"([^"]+)".*|\1|p' | head -n 1)
+	[ -n "$_enc" ] && _src=$(decrypt_payload "$_enc")
+	case "$_src" in
+		*'.m3u8'*) return 0 ;;
+	esac
+	return 1
+}
+
+# compare two titles loosely, so a source switch never lands on another show.
+# sites spell things differently ("shippuuden" / "shippuden"), so this scores
+# how many words of the shorter title also appear in the longer one
+titles_match() {
+	_a=$(printf '%s' "$1" | tr 'A-Z' 'a-z' | sed 's|[^a-z0-9]| |g; s|  *| |g; s|^ ||; s| $||')
+	_b=$(printf '%s' "$2" | tr 'A-Z' 'a-z' | sed 's|[^a-z0-9]| |g; s|  *| |g; s|^ ||; s| $||')
+	[ -z "$_a" ] && return 1
+	[ -z "$_b" ] && return 1
+	[ "$_a" = "$_b" ] && return 0
+	awk -v a="$_a" -v b="$_b" 'BEGIN {
+		na = split(a, x, " "); nb = split(b, y, " ")
+		hits = 0
+		for (i = 1; i <= na; i++)
+			for (j = 1; j <= nb; j++)
+				if (x[i] != "" && x[i] == y[j]) { hits++; break }
+		short = (na < nb ? na : nb)
+		if (short == 0) exit 1
+		exit (hits / short >= 0.6) ? 0 : 1
+	}'
+}
+
+# look for the show we already picked on the other sources, and switch to the
+# first one that actually has it dubbed
+find_dub_source() {
+	_q=$(printf '%s' "$anime_title" | sed 's| |+|g')
+	for _src in animesuge anichan; do
+		[ "$_src" = "$provider" ] && continue
+		case "$_src" in
+			animesuge)
+				_line=$(as_search "$_q" | head -n 1)
+				[ -z "$_line" ] && continue
+				titles_match "$anime_title" "$(printf '%s' "$_line" | cut -f 2)" || continue
+				info "No dub here, checking animesuge..."
+				if as_has_dub "$(printf '%s' "$_line" | cut -f 1)"; then
+					_id=$(as_anime_id "$(printf '%s' "$_line" | cut -f 1)")
+					[ -z "$_id" ] && continue
+					provider=animesuge
+					anime_id=$_id
+					info "Switched to animesuge: $(printf '%s' "$_line" | cut -f 2) (dubbed)"
+					return 0
+				fi
+				;;
+			anichan)
+				_line=$(ac_search "$_q" | head -n 1)
+				[ -z "$_line" ] && continue
+				titles_match "$anime_title" "$(printf '%s' "$_line" | cut -f 2)" || continue
+				_id=$(printf '%s' "$_line" | cut -f 1)
+				info "No dub here, checking anichan..."
+				if ac_has_dub "$_id"; then
+					provider=anichan
+					anime_id=$_id
+					info "Switched to anichan: $(printf '%s' "$_line" | cut -f 2) (dubbed)"
+					return 0
+				fi
+				;;
+		esac
+	done
+	return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -1018,7 +1111,12 @@ update_script() {
 load_episode_maps() {
 	episode_maps=$(provider_episode_maps "$anime_id")
 	if [ -z "$episode_maps" ] && [ "$mode" = dub ]; then
-		warn "No dubbed episodes for that one, using the subbed version"
+		if find_dub_source; then
+			episode_maps=$(provider_episode_maps "$anime_id")
+		fi
+	fi
+	if [ -z "$episode_maps" ] && [ "$mode" = dub ]; then
+		warn "No site has this one dubbed, using the subbed version"
 		mode=sub
 		episode_maps=$(provider_episode_maps "$anime_id")
 	fi

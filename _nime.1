@@ -1,4 +1,4 @@
-.TH _NIME 1 "2026-11" "_nime 1.1.1" "User Commands"
+.TH _NIME 1 "2026-11" "_nime 1.2.0" "User Commands"
 .SH NAME
 _nime \- browse and watch anime from the terminal
 .SH SYNOPSIS
@@ -53,7 +53,8 @@ Use VLC instead of mpv.
 .TP
 .B \-\-dub
 Play the dubbed version. This is the default; use \fB\-\-sub\fR to override
-it.
+it. When the selected source has no dub for a show, the other sources are
+checked and the first one that has it dubbed is used.
 .TP
 .BR \-\-sub\-lang " \fIlang\fR"
 Subtitle track to use, as a language code (\fIeng\fR, \fIger\fR, \fIspa\fR) or

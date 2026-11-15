@@ -107,8 +107,17 @@ Pick from the menu:
 _nime frieren
 ```
 
-Dubs are the default. If a show has no dub, `_nime` says so and plays the
-subbed version instead; add `--sub` to ask for subs from the start.
+Dubs are the default. If the source you picked has no dub for that show,
+`_nime` checks the other source and switches to whichever one has it:
+
+```
+No dub here, checking anichan...
+Switched to anichan: Naruto Shippuden the Movie: Blood Prison (dubbed)
+```
+
+The switch only happens when the title actually matches, so it never lands you
+on a different show. If no source has a dub, it says so and plays the subbed
+version. Add `--sub` to ask for subs from the start.
 
 ```sh
 _nime --sub frieren
