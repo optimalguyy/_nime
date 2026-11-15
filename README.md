@@ -38,6 +38,7 @@ macOS and Termux, so a fresh system already has them.
 | `vlc` | alternative player |
 | `yt-dlp` / `ffmpeg` | `--download` |
 | `syncplay` | `--syncplay` |
+| `python3` | keeping one player window, see below |
 | `termux-am` | `am` intents on Android |
 
 **No player?** `_nime` still resolves the episode and prints the stream URL,
@@ -189,6 +190,13 @@ way they always did:
 _nime "<title>" -e 30        # episode 30 overall, whichever season that lands in
 _nime-dl "<title>" -e 1-40   # the whole run
 ```
+
+### One window
+
+`next`, `previous`, `select` and `replay` load the episode into the player
+window that is already open instead of opening a second one, and quitting the
+menu closes it. The player is handed a control socket for this, which needs
+`python3`; without it every episode simply gets its own window.
 
 The other site:
 

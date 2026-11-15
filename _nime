@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.4.0"
+version="1.5.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -488,6 +488,52 @@ season_query() {
 	printf '%s' "$1" | LC_ALL=C sed 's/[^A-Za-z0-9 ]/ /g; s/  */ /g; s/^ //; s/ $//' | tr ' ' '+'
 }
 
+# ---------------------------------------------------------------------------
+# one player window
+# ---------------------------------------------------------------------------
+# a second episode should replace the first inside the same window, and quitting
+# should close it, so the player is given a control socket when one can be had
+player_sock=""
+player_ipc=0
+player_running=0
+
+player_ipc_setup() {
+	[ "$player_ipc" = 1 ] && return 0
+	command -v python3 >/dev/null 2>&1 || return 1
+	player_sock="${TMPDIR:-/tmp}/_nime_player.$$.sock"
+	rm -f "$player_sock"
+	player_ipc=1
+}
+
+# quoting for the json mpv expects
+json_escape() {
+	printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# player_cmd <json>: hand one command to the player
+player_cmd() {
+	[ -n "$player_sock" ] && [ -S "$player_sock" ] || return 1
+	python3 - "$player_sock" "$1" >/dev/null 2>&1 <<'PY'
+import socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(3)
+try:
+    s.connect(sys.argv[1])
+    s.sendall((sys.argv[2] + chr(10)).encode())
+    s.recv(4096)
+except Exception:
+    sys.exit(1)
+PY
+}
+
+# close the player and drop the socket
+player_stop() {
+	player_cmd '{"command":["quit"]}'
+	sleep 0.2
+	rm -f "$player_sock"
+	player_running=0
+}
+
 # every result for a query, not just the handful the search box shows.
 # the page lists poster links and titles separately but in the same order,
 # so both are pulled out and zipped back together
@@ -497,20 +543,27 @@ as_search_all() {
 		_page=$(http_get "$base_as/filter?keyword=$1&page=$_p") || return 1
 		[ -z "$_page" ] && break
 		_page=$(printf '%s' "$_page" | unescape)
-		_slugs=$(printf '%s' "$_page" | grep -oE '/anime/[a-zA-Z0-9_-]+/ep-' |
-			sed 's|/anime/||; s|/ep-||' | awk '!seen[$0]++')
-		[ -z "$_slugs" ] && break
+		# each card carries its slug and its id in the poster link, so no
+		# extra page has to be fetched per season later on
+		_ids=$(printf '%s' "$_page" | tr '\n' ' ' |
+			grep -oE '<a class="poster[^>]*>' |
+			sed -E 's|.*/anime/([^/"]+)/ep-[^"]*".*|\1|' | awk '!seen[$0]++')
+		[ -z "$_ids" ] && break
+		_numbers=$(printf '%s' "$_page" | tr '\n' ' ' |
+			grep -oE '<a class="poster[^>]*>' |
+			sed -nE 's|.*data-tip="([0-9]+)".*|\1|p')
 		_names=$(printf '%s' "$_page" | tr '\n' ' ' |
 			grep -oE '<div class="name">[^<]*<a [^>]*>[^<]*</a>' |
 			sed -E 's|.*>([^<]*)</a>|\1|' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 		_tmp="${TMPDIR:-/tmp}/_nime_asall.$$"
-		printf '%s\n' "$_slugs" >"${_tmp}.s"
+		printf '%s\n' "$_ids" >"${_tmp}.s"
+		printf '%s\n' "$_numbers" >"${_tmp}.i"
 		printf '%s\n' "$_names" >"${_tmp}.n"
-		paste "${_tmp}.s" "${_tmp}.n" | while IFS="$TAB" read -r _sl _nm; do
+		paste "${_tmp}.s" "${_tmp}.i" "${_tmp}.n" | while IFS="$TAB" read -r _sl _no _nm; do
 			[ -z "$_sl" ] && continue
-			printf '%s\t%s\n' "$_sl" "$(printf '%s' "$_nm" | html_decode)"
+			printf '%s\t%s\t%s\n' "$_sl" "$(printf '%s' "$_nm" | html_decode)" "$_no"
 		done
-		rm -f "${_tmp}.s" "${_tmp}.n"
+		rm -f "${_tmp}.s" "${_tmp}.i" "${_tmp}.n"
 		_p=$((_p + 1))
 	done
 }
@@ -522,8 +575,10 @@ provider_seasons() {
 	[ -z "$_base" ] && return 1
 	case "$provider" in
 		animesuge)
-			as_search_all "$1" | while IFS="$TAB" read -r _sid _name; do
+			as_search_all "$1" | while IFS="$TAB" read -r _slug _name _sid; do
 				[ "$(season_base "$_name")" = "$_base" ] || continue
+				[ -z "$_sid" ] && _sid=$(as_anime_id "$_slug")
+				[ -z "$_sid" ] && continue
 				_flag=0
 				[ "$_name" = "$anime_title" ] && _flag=1
 				printf '%s\t%s\t%s\t%s\n' "$_sid" "$_name" "$(season_no "$_name")" "$_flag"
@@ -555,16 +610,16 @@ merge_season_maps() {
 	_off=0
 	_used=0
 	_blocks=""
+	# ask every season for its episodes at once instead of one after another
 	while IFS="$TAB" read -r _sid _stitle _sno _flag; do
 		[ -z "$_sid" ] && continue
-		case "$provider" in
-			animesuge)
-				_id=$(as_anime_id "$_sid") || continue
-				[ -z "$_id" ] && continue
-				;;
-			*) _id=$_sid ;;
-		esac
-		_maps=$(provider_episode_maps "$_id")
+		( provider_episode_maps "$_sid" >"${_tmp}.${_sid}" ) &
+	done <"$_tmp"
+	wait
+
+	while IFS="$TAB" read -r _sid _stitle _sno _flag; do
+		[ -z "$_sid" ] && continue
+		_maps=$(cat "${_tmp}.${_sid}" 2>/dev/null)
 		[ -z "$_maps" ] && continue
 		_cnt=$(printf '%s\n' "$_maps" | grep -c .)
 		_used=$((_used + 1))
@@ -574,7 +629,7 @@ merge_season_maps() {
 "
 		_off=$((_off + _cnt))
 	done <"$_tmp"
-	rm -f "$_tmp"
+	rm -f "$_tmp" "${_tmp}".*
 	[ "$_off" -gt 0 ] || return 1
 	season_total=$_used
 	episode_maps=$_blocks
@@ -1123,6 +1178,23 @@ print_stream() {
 
 play_episode() {
 	ep_label=$(ep_display "$ep_no")
+
+	# mpv takes the next episode in the window it already has open
+	case "$player_function" in
+		*mpv*) player_ipc_setup ;;
+	esac
+
+	if [ "$player_running" = 1 ] && [ "$player_ipc" = 1 ] && [ -n "$player_sock" ]; then
+		player_cmd "{\"command\":[\"loadfile\",\"$(json_escape "$video_link")\",\"replace\"]}"
+		[ -n "$sub_link" ] && player_cmd "{\"command\":[\"sub-add\",\"$(json_escape "$sub_link")\",\"select\"]}"
+		player_cmd "{\"command\":[\"set_property\",\"media-title\",\"$(json_escape "$anime_title $ep_label")\"]}"
+		clear_status
+		replay="$video_link"
+		unset video_link
+		update_history
+		return
+	fi
+
 	if [ "$player_function" = download ]; then
 		download_video
 		unset video_link
@@ -1151,7 +1223,7 @@ play_episode() {
 			fi
 			;;
 		*flatpak*mpv*)
-			nohup flatpak run io.mpv.Mpv --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
+			nohup flatpak run io.mpv.Mpv --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
 				$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" \
 				"$video_link" >/dev/null 2>&1 &
 			;;
@@ -1174,10 +1246,10 @@ play_episode() {
 			;;
 		*mpv*)
 			if [ "$no_detach" = 1 ]; then
-				$player_function --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
+				$player_function --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
 					$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" "$video_link"
 			else
-				nohup $player_function --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
+				nohup $player_function --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
 					$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" \
 					"$video_link" >/dev/null 2>&1 &
 			fi
@@ -1205,6 +1277,16 @@ play_episode() {
 			fi
 			;;
 	esac
+
+	# wait for the control socket, then remember that a window is open
+	if [ "$player_ipc" = 1 ] && [ -n "$player_sock" ]; then
+		_i=0
+		while [ "$_i" -lt 30 ] && [ ! -S "$player_sock" ]; do
+			sleep 0.1
+			_i=$((_i + 1))
+		done
+		[ -S "$player_sock" ] && player_running=1
+	fi
 
 	# the player has the stream now, so the progress lines have done their job.
 	# iSH is the exception: its branch prints a link the user has to tap
@@ -1291,6 +1373,7 @@ update_script() {
 # load the episode list for $anime_id into $episode_maps / $ep_list,
 # stepping down to subs when a show simply has no dub
 load_episode_maps() {
+	info "Loading episodes..."
 	episode_maps=$(provider_episode_maps "$anime_id")
 	if [ -z "$episode_maps" ] && [ "$mode" = dub ]; then
 		if find_dub_source; then
@@ -1485,7 +1568,7 @@ case "$player_function" in
 	*) dep_ch "$player_function" ;;
 esac
 
-trap 'tput sgr0 2>/dev/null; rm -f "${histfile}.new"' INT HUP TERM
+trap 'player_stop; tput sgr0 2>/dev/null; rm -f "${histfile}.new"' INT HUP TERM
 
 info "_nime $version"
 
@@ -1574,6 +1657,9 @@ while [ "$player_function" != download ] && [ "$player_function" != print ]; do
 	}
 	play "$ep_no"
 done
+
+	# leaving the menu closes the window the episode was playing in
+	player_stop
 
 rm -f "${histfile}.new"
 

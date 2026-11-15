@@ -1,4 +1,4 @@
-.TH _NIME 1 "2026-11" "_nime 1.4.0" "User Commands"
+.TH _NIME 1 "2026-11" "_nime 1.5.0" "User Commands"
 .SH NAME
 _nime \- browse and watch anime from the terminal
 .SH SYNOPSIS
@@ -24,6 +24,11 @@ including the encrypted stream payload, which it decrypts with
 A series that the site splits into one entry per season is put back together:
 every season is looked up and their episodes are listed as one run, numbered
 straight through, with the season shown in front of each episode number.
+.PP
+Moving to the next or previous episode loads it into the player window that is
+already open, and leaving the menu closes that window. This needs
+.BR python3 (1)
+for the control socket; without it every episode opens its own window.
 .PP
 When no player is available it prints the stream url, the subtitle url and the
 required referer instead of failing.
