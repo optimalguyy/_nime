@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.2.0"
+version="1.3.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -53,6 +53,7 @@ help_info() {
 	    _nime [options] [query]
 	    _nime [query] [options]
 	    _nime [options] [query] [options]
+	    _nime-dl [options] [query]   (same, but downloads the episode)
 
 	Sources:
 	    -s, --source <name>   animesuge (default) or anichan
@@ -70,6 +71,9 @@ help_info() {
 	  -h, --help        Show this help message and exit
 	  --dub             Dubbed audio (default); other sites are tried if this
 	                    one has no dub
+	  -engdub           English dub (same as --dub)
+	  -gerdub, -spadub, -fredub, -itadub, -pordub, -rusdub, -aradub
+	                    That language's dub, when a source has one
 	  --sub             Play the subbed version
 	  --sub-lang <lang> Subtitles to use, a code (eng, ger, spa) or a name
 	                    (german). With --download, "all" embeds every track
@@ -1137,6 +1141,7 @@ player_extra_flags="${_NIME_PLAYER_FLAGS:-}"
 no_detach="${_NIME_NO_DETACH:-0}"
 skip_intro="${_NIME_SKIP:-0}"
 sub_lang="${_NIME_SUB_LANG:-}"
+dub_lang="${_NIME_DUB_LANG:-eng}"
 sub_tracks=""
 sub_code=""
 sub_label=""
@@ -1181,7 +1186,15 @@ while [ $# -gt 0 ]; do
 			;;
 		-v | --vlc) player_function=vlc ;;
 		--dub) mode=dub ;;
-		--sub) mode=sub ;;
+		-sub | --sub) mode=sub ;;
+		-engdub | --engdub | -gerdub | --gerdub | -fredub | --fredub | -spadub | --spadub | \
+			-itudub | -itadub | --itadub | -pordub | --pordub | -rusdub | --rusdub | -aradub | --aradub)
+			# one flag per audio language, e.g. -gerdub: keep the language part
+			_dub_flag="${1#--}"
+			dub_lang="${_dub_flag#-}"
+			dub_lang="${dub_lang%dub}"
+			mode=dub
+			;;
 		--skip) skip_intro=1 ;;
 		--sub-lang)
 			[ $# -lt 2 ] && die "missing argument!"
@@ -1218,6 +1231,20 @@ case "$provider" in
 	animesuge | anichan) ;;
 	*) die "Unknown source '$provider' (use animesuge or anichan)" ;;
 esac
+
+if [ "$mode" = dub ] && [ "$dub_lang" != eng ]; then
+	case "$dub_lang" in
+		ger) dub_name=German ;;
+		fre) dub_name=French ;;
+		spa) dub_name=Spanish ;;
+		ita) dub_name=Italian ;;
+		por) dub_name=Portuguese ;;
+		rus) dub_name=Russian ;;
+		ara) dub_name=Arabic ;;
+		*) dub_name=$dub_lang ;;
+	esac
+	die "No $dub_name dub here: animesuge and anichan only have English dubs, and aniworld.to streams through players that need a browser (VOE, Filemoon, Doodstream, Vidmoly), so it can't be read. Use -dub for English or -sub."
+fi
 
 case "$menu_program" in
 	fzf) dep_ch_failover "fzf" >/dev/null 2>&1 || menu_program=none ;;

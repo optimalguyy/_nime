@@ -1,0 +1,19 @@
+#!/bin/sh
+# _nime-dl - the download side of _nime.
+#
+# Everything after the command name is handed to _nime with --download, so the
+# menus, sources, episode ranges and subtitle options all behave exactly as
+# they do when playing.
+
+dir=$(CDPATH='' cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)
+
+if [ -n "$dir" ] && [ -x "$dir/_nime" ]; then
+	exec "$dir/_nime" --download "$@"
+fi
+
+if command -v _nime >/dev/null 2>&1; then
+	exec _nime --download "$@"
+fi
+
+printf '_nime-dl: cannot find _nime next to this script or in PATH\n' >&2
+exit 1

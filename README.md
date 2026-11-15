@@ -46,14 +46,15 @@ never installs anything for you.
 
 ## Install
 
-`_nime` is one file. Put it anywhere on your `PATH`.
+`_nime` is one script, and `_nime-dl` is a two-line wrapper around it. Put both
+anywhere on your `PATH`.
 
 ```sh
 git clone https://github.com/USERNAME/_nime.git
 cd _nime
 mkdir -p ~/.local/bin
-cp _nime ~/.local/bin/
-chmod +x ~/.local/bin/_nime
+cp _nime _nime-dl ~/.local/bin/
+chmod +x ~/.local/bin/_nime ~/.local/bin/_nime-dl
 ```
 
 Make sure `~/.local/bin` is on your `PATH`:
@@ -66,7 +67,7 @@ export PATH="$HOME/.local/bin:$PATH"
 For a system wide install, use `/usr/local/bin` instead:
 
 ```sh
-sudo cp _nime /usr/local/bin/_nime
+sudo cp _nime _nime-dl /usr/local/bin/
 ```
 
 The man page is optional:
@@ -87,11 +88,32 @@ replaces the installed copy while keeping the old one as `_nime.bak`. Set
 `repo_user` at the top of the script to your GitHub username once, or export
 `_NIME_USER` / `_NIME_BRANCH`.
 
+## Commands
+
+One command per job, so you never have to remember a flag:
+
+| command | what it does |
+| --- | --- |
+| `_nime` | browse and play |
+| `_nime-dl` | same menus, but saves the episode |
+
+```sh
+_nime                     # search prompt, then play
+_nime frieren             # play
+_nime frieren -e 3        # play episode 3
+_nime-dl frieren          # download
+_nime-dl frieren -e 1-5   # download episodes 1 to 5
+```
+
+`_nime-dl` is the same program with `--download` already set, so every option
+below works in both.
+
 ## Usage
 
 ```sh
 _nime                    # opens a search prompt
 _nime [options] [query]
+_nime-dl [options] [query]
 ```
 
 Typing `_nime` on its own gives you a search bar: type a title, press enter, and
@@ -116,8 +138,12 @@ Switched to anichan: Naruto Shippuden the Movie: Blood Prison (dubbed)
 ```
 
 The switch only happens when the title actually matches, so it never lands you
-on a different show. If no source has a dub, it says so and plays the subbed
-version. Add `--sub` to ask for subs from the start.
+on a different show. If no source has a dub, it says so and plays the subbed version. Add `--sub` to ask for subs from the start.
+
+Each audio language has its own flag: `-engdub`, `-gerdub`, `-spadub`,
+`-fredub`, `-itadub`, `-pordub`, `-rusdub` and `-aradub`. Only English dubs are
+served by the sources `_nime` can read, so `-gerdub` and the rest stop with a
+message that says exactly that, instead of playing the wrong audio.
 
 ```sh
 _nime --sub frieren
@@ -237,6 +263,8 @@ failing.
 | `-S, --select-nth <n>` | pick the nth entry without a menu |
 | `-v, --vlc` | use VLC |
 | `--dub` | dubbed audio (**default**) |
+| `-engdub` | English dub (same as `--dub`) |
+| `-gerdub` `-spadub` `-fredub` `-itadub` `-pordub` `-rusdub` `-aradub` | that language's dub, when a source has one |
 | `--sub` | subtitled instead of dubbed |
 | `--skip` | skip intros and outros (mpv) |
 | `--sub-lang <lang>` | subtitle language, as a code (`eng`, `ger`, `spa`) or a name (`german`); `all` embeds every track when downloading |
