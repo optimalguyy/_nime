@@ -346,6 +346,10 @@ pick:
 
 On Android that is `/storage/emulated/0/Download/_nime downloads`.
 
+Downloads use the audio you asked for — the dubbed track by default, the
+original one with `--sub` — so a downloaded file sounds like the version you
+picked, not whichever track the stream lists first.
+
 While an episode downloads you get one line that updates in place — a bar, the
 percentage, the speed and the time left — and if a download fails it says why
 instead of just stopping.

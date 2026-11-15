@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.2"
+version="1.8.3"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1239,12 +1239,20 @@ download_video() {
 	_final="$_dl_dir/$_name.mp4"
 
 	info "Downloading $anime_title episode $ep_no..."
+	# the audio has to be picked by language: the master carries English and
+	# Japanese, its default is Japanese, so a dub would quietly download the
+	# subbed audio. yt-dlp has no --alang (that is mpv's), hence the format chain
+	case "$mode" in
+		dub) _want=en ;;
+		*) _want=ja ;;
+	esac
+	_fmt="bv*+ba[language=$_want]/bv*+ba[language^=$_want]/bv*+ba/b"
 	_ok=0
 	if command -v yt-dlp >/dev/null 2>&1; then
 		# the progress lines become one bar, everything else goes to a log so a
 		# failure can say what actually went wrong
 		(
-			yt-dlp --newline --progress --referer "$refr" -f 'bv*+ba/b' --merge-output-format mp4 \
+			yt-dlp --newline --progress --referer "$refr" -f "$_fmt" --merge-output-format mp4 \
 				-o "$_tmpd/raw.%(ext)s" "$video_link" 2>&1
 			printf 'rc=%s\n' "$?" >"$_tmpd/rc"
 		) | while IFS= read -r _line; do
