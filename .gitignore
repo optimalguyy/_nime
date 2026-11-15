@@ -1,0 +1,12 @@
+# editor and os noise
+*.swp
+*~
+.DS_Store
+
+# local run artifacts
+*.bak
+*.new
+nime-hsts
+
+# downloads that land next to the script when no download folder exists
+_nime downloads/

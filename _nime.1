@@ -1,0 +1,169 @@
+.TH _NIME 1 "2026-11" "_nime 1.0.0" "User Commands"
+.SH NAME
+_nime \- browse and watch anime from the terminal
+.SH SYNOPSIS
+.B _nime
+[\fIoptions\fR] [\fIquery\fR]
+.SH DESCRIPTION
+.B _nime
+searches an anime streaming site, lists the episodes, resolves the stream and
+hands it to a local player. It scrapes
+.BR animesuge.cz " and " anichan.to
+and talks to the MegaPlay player directly, including its encrypted stream
+payload, which it decrypts with
+.BR openssl (1).
+.PP
+When no player is available it prints the stream url, the subtitle url and the
+required referer instead of failing.
+.SH OPTIONS
+.TP
+.BR \-s ", " \-\-source " \fIname\fR"
+Source to use: \fIanimesuge\fR (default) or \fIanichan\fR.
+.TP
+.BR \-c ", " \-\-continue
+Continue watching from history.
+.TP
+.BR \-d ", " \-\-download
+Download the episode instead of playing it, with
+.BR yt\-dlp (1)
+or
+.BR ffmpeg (1).
+.TP
+.BR \-D ", " \-\-delete
+Delete the history file and exit.
+.TP
+.BR \-e ", " \-\-episode " \fIn\fR"
+Play episode \fIn\fR, or a range such as \fI1\-3\fR.
+.TP
+.BR \-r ", " \-\-range " \fIn\fR"
+Same as \fB\-\-episode\fR.
+.TP
+.BR \-q ", " \-\-quality " \fIq\fR"
+Quality to pick: \fIbest\fR (default), \fIworst\fR, or a height such as
+\fI1080\fR.
+.TP
+.BR \-S ", " \-\-select\-nth " \fIn\fR"
+Select the nth search result or history entry without opening a menu.
+.TP
+.BR \-v ", " \-\-vlc
+Use VLC instead of mpv.
+.TP
+.B \-\-dub
+Play the dubbed version, when the source has one.
+.TP
+.BR \-\-sub\-lang " \fIlang\fR"
+Subtitle track to use, as a language code (\fIeng\fR, \fIger\fR, \fIspa\fR) or
+as a name (\fIgerman\fR). With \fB\-\-download\fR, \fIall\fR embeds every
+track the source offers. Without it the track the source marks default is used.
+.TP
+.B \-\-list\-subs
+Print the subtitle tracks available for the selected episode, with language
+codes, then exit.
+.TP
+.B \-\-skip
+Skip the opening and the ending. Works by writing a small mpv script with the
+intro and outro marks the player reports. mpv only.
+.TP
+.B \-\-syncplay
+Play through Syncplay, so playback can be shared with other people.
+.TP
+.B \-\-no\-detach
+Keep the player in the foreground instead of backgrounding it.
+.TP
+.B \-\-check\-deps
+Print the state of every required and optional dependency, the detected
+player and the default source, then exit.
+.TP
+.BR \-U ", " \-\-update
+Fetch the script from the git repository, compare versions and replace the
+installed copy, keeping the previous one as \fI_nime.bak\fR.
+.TP
+.BR \-V ", " \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print usage and exit.
+.SH ENVIRONMENT
+.TP
+.B _NIME_SOURCE
+Default source.
+.TP
+.B _NIME_MODE
+\fIsub\fR or \fIdub\fR.
+.TP
+.B _NIME_QUALITY
+Default quality.
+.TP
+.B _NIME_PLAYER
+Player command to use instead of the detected one.
+.TP
+.B _NIME_PLAYER_FLAGS
+Extra flags handed to the player.
+.TP
+.B _NIME_MENU
+\fIfzf\fR (default) or \fInone\fR for a numbered prompt.
+.TP
+.B _NIME_HIST_DIR
+Directory holding the history file. Defaults to
+\fI$XDG_STATE_HOME/_nime\fR.
+.TP
+.B _NIME_DOWNLOAD_DIR
+Directory downloads are written to. Defaults to a folder named
+\fI_nime downloads\fR inside the XDG download dir, \fI~/Downloads\fR,
+\fI~/Desktop\fR or the home directory, whichever exists first.
+.TP
+.B _NIME_SKIP
+Set to \fI1\fR to always skip intros and outros.
+.TP
+.B _NIME_SUB_LANG
+Default subtitle language.
+.TP
+.B _NIME_COLOR
+Set to \fI0\fR to disable colours.
+.TP
+.B _NIME_USER ", " _NIME_BRANCH
+Repository and branch used by \fB\-U\fR.
+.SH FILES
+.TP
+.I $XDG_STATE_HOME/_nime/nime-hsts
+History: one tab separated line per anime, holding the episode, the source, the
+id and the title.
+.TP
+.I $XDG_CACHE_HOME/_nime/nime-skip.lua
+Generated mpv script used by \fB\-\-skip\fR.
+.TP
+.I <download folder>/_nime downloads/
+Where \fB\-\-download\fR writes. Files are mp4 with the subtitles muxed in as a
+selectable soft track.
+.SH EXAMPLES
+.TP
+Search and play interactively:
+.EX
+_nime frieren
+.EE
+.TP
+Play episode five in 1080p:
+.EX
+_nime \-q 1080 \-e 5 frieren
+.EE
+.TP
+Watch the other source with intros skipped:
+.EX
+_nime \-\-skip \-s anichan frieren
+.EE
+.TP
+Continue from history:
+.EX
+_nime \-c
+.EE
+.SH EXIT STATUS
+0 on success, 1 on any error, including a failed search, a missing player, a
+failed decryption or an episode that could not be resolved.
+.SH SEE ALSO
+.BR curl (1),
+.BR openssl (1),
+.BR mpv (1),
+.BR vlc (1),
+.BR yt\-dlp (1)
+.SH LICENSE
+GPL-3.0. This program comes with absolutely no warranty.
