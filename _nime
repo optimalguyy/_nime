@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.6.5"
+version="1.6.6"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -336,10 +336,24 @@ as_episode_maps() {
 		done
 }
 
+# as_servers <ids> [sub|dub]: the list holds one group per language, and the sub
+# group comes first, so picking the first server blindly gave a dubbed episode
+# the subbed stream
 as_servers() {
 	_raw=$(http_get "$base_as/ajax/server/list?servers=$1" "" xhr) || return 1
 	[ -z "$_raw" ] && return 1
-	printf '%s' "$_raw" | unescape | tr '\n' ' ' |
+	_group=$(printf '%s' "$_raw" | unescape | tr '\n' ' ' |
+		sed 's|data-type="\([a-z]*\)"|\n@TYPE@\1@|g' |
+		awk -v want="${2:-$mode}" '
+			/^@TYPE@/ {
+				split($0, p, "@")
+				cur = p[3]
+				sub(/^@TYPE@[a-z]*@/, "")
+			}
+			cur == want { print }
+		')
+	[ -z "$_group" ] && _group=$(printf '%s' "$_raw" | unescape | tr '\n' ' ')
+	printf '%s' "$_group" |
 		sed 's|<div class="server"|\n<div class="server"|g' |
 		while IFS= read -r _rec || [ -n "$_rec" ]; do
 			_link=$(printf '%s' "$_rec" | sed -nE 's|.*data-link-id="([^"]*)".*|\1|p')
@@ -694,6 +708,34 @@ find_dub_source() {
 # provider dispatch
 # ---------------------------------------------------------------------------
 
+# release year of a result, remembered on disk because it costs a request and
+# does not change. empty when the source does not say
+release_year() {
+	_key="$1:$2"
+	_hit=$(grep -m 1 "^${_key}${TAB}" "$year_cache" 2>/dev/null | cut -f 2)
+	if [ -n "$_hit" ]; then
+		printf '%s' "$_hit"
+		return
+	fi
+	case "$1" in
+		animesuge)
+			_page=$(http_get "$base_as/anime/$2")
+			# the first date on the page is the show's own, later ones are sequels
+			_y=$(printf '%s' "$_page" | grep -o 'itemprop="dateCreated"[^<]*' | head -n 1 |
+				grep -oE '(19|20)[0-9]{2}' | head -n 1)
+			;;
+		anichan)
+			_json=$(http_get "$base_ac/api/catalog/anime/$2")
+			# the catalog carries every related entry too, and the show's own date
+			# comes first
+			_y=$(printf '%s' "$_json" | grep -o '"startDate":{[^}]*}' | head -n 1 |
+				sed -nE 's/.*"year":([0-9]{4}).*/\1/p')
+			;;
+		esac
+	[ -n "$_y" ] && printf '%s\t%s\n' "$_key" "$_y" >>"$year_cache" 2>/dev/null
+	printf '%s' "$_y"
+}
+
 # only the rows whose title carries a word of the query, so a search does not
 # come back with every entry the source happens to associate with it
 relevant_rows() {
@@ -728,15 +770,29 @@ search_all_sources() {
 	# a short query like an acronym matches no title at all, so keep the raw
 	# answers rather than showing nothing
 	[ -z "$_pruned" ] && _pruned=$_all
-	printf '%s\n' "$_pruned" |
-		awk -F'\t' 'NF >= 3 {
-			key = tolower($2)
+	printf '%s\n' "$_pruned" >"${_tmp}.in"
+	# ask for every year at once, then list the oldest series first so the one to
+	# start with sits at the top
+	_i=0
+	while IFS="$TAB" read -r _id _title _prov; do
+		[ -z "$_id" ] && continue
+		_i=$((_i + 1))
+		(
+			_y=$(release_year "$_prov" "$_id")
+			printf '%s\t%s\t%s\t%s\t%s\n' "${_y:-9999}" "$_id" "$_title" "$_prov" "$_title" >"${_tmp}.r$_i"
+		) &
+	done <"${_tmp}.in"
+	wait
+	cat "${_tmp}".r* 2>/dev/null | sort -t"$TAB" -k1,1n -k3,3 |
+		awk -F'\t' 'NF >= 5 {
+			key = tolower($3)
 			gsub(/[^a-z0-9]/, "", key)
 			if (key == "" || key in seen) next
 			seen[key] = 1
-			print
+			label = ($1 == 9999 ? $3 : $3 " (" $1 ")")
+			printf "%s\t%s\t%s\t%s\n", $2, label, $4, $5
 		}'
-	rm -f "${_tmp}.a" "${_tmp}.b"
+	rm -f "${_tmp}.a" "${_tmp}.b" "${_tmp}.in" "${_tmp}".r*
 }
 
 provider_episode_maps() {
@@ -760,7 +816,8 @@ provider_embed() {
 	case "$provider" in
 		animesuge)
 			[ -z "$_ids" ] || [ "$_ids" = "-" ] && return 1
-			_servers=$(as_servers "$_ids")
+			_servers=$(as_servers "$_ids" "$mode")
+			[ -z "$_servers" ] && _servers=$(as_servers "$_ids" sub)
 			[ -z "$_servers" ] && return 1
 			_total=$(printf '%s\n' "$_servers" | grep -c .)
 			_i=1
@@ -967,6 +1024,9 @@ resolve_episode() {
 
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/_nime"
 skip_lua="$cache_dir/nime-skip.lua"
+year_cache="$cache_dir/years"
+mkdir -p "$cache_dir" 2>/dev/null
+[ -f "$year_cache" ] || : >"$year_cache" 2>/dev/null
 
 write_skip_script() {
 	mkdir -p "$cache_dir" 2>/dev/null || return 1
@@ -1688,7 +1748,8 @@ else
 	[ -z "$_sel" ] && die "Invalid anime selection"
 
 	anime_id=$(printf '%s' "$_sel" | cut -f 1)
-	anime_title=$(printf '%s' "$_sel" | cut -f 2)
+	anime_title=$(printf '%s' "$_sel" | cut -f 4)
+	[ -z "$anime_title" ] && anime_title=$(printf '%s' "$_sel" | cut -f 2)
 	provider=$(printf '%s' "$_sel" | cut -f 3)
 	[ -z "$provider" ] && provider=animesuge
 

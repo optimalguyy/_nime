@@ -10,7 +10,9 @@ Everything happens in the terminal: you search, you pick an anime and an
 episode from a list, and the stream is handed to a local player. Every source it
 knows is searched at once and the answers are merged into one list, so there is
 nothing to choose up front. Only titles that match what you typed are listed,
-and music videos or shows that have not aired yet are left out. Nothing is installed, no account is needed and no
+and music videos or shows that have not aired yet are left out. The list runs
+oldest first with the release year next to each title, so the series you should
+start with is at the top. Nothing is installed, no account is needed and no
 daemon runs in the background.
 
 > **This is a personal project.** It scrapes third party sites. Read
