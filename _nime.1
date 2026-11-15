@@ -1,4 +1,4 @@
-.TH _NIME 1 "2026-11" "_nime 1.5.1" "User Commands"
+.TH _NIME 1 "2026-11" "_nime 1.6.0" "User Commands"
 .SH NAME
 _nime \- browse and watch anime from the terminal
 .SH SYNOPSIS
@@ -34,9 +34,6 @@ When no player is available it prints the stream url, the subtitle url and the
 required referer instead of failing.
 .SH OPTIONS
 .TP
-.BR \-s ", " \-\-source " \fIname\fR"
-Which site to use: \fI1\fR (default) or \fI2\fR.
-.TP
 .BR \-c ", " \-\-continue
 Continue watching from history.
 .TP
@@ -67,8 +64,8 @@ Use VLC instead of mpv.
 .TP
 .B \-\-dub
 Play the dubbed version. This is the default; use \fB\-\-sub\fR to override
-it. When the selected source has no dub for a show, the other sources are
-checked and the first one that has it dubbed is used.
+it. When the source it picked has no dub for a show, the other one is checked
+and used if it has the dub.
 .TP
 .BR \-engdub
 English dub, the same as \fB\-\-dub\fR.
@@ -119,9 +116,6 @@ Print the version and exit.
 .BR \-h ", " \-\-help
 Print usage and exit.
 .SH ENVIRONMENT
-.TP
-.B _NIME_SOURCE
-Default source.
 .TP
 .B _NIME_MODE
 \fIsub\fR or \fIdub\fR.

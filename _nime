@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.5.1"
+version="1.6.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -69,9 +69,6 @@ help_info() {
 	    _nime [options] [query] [options]
 	    _nime-dl [options] [query]   (same, but downloads the episode)
 
-	Sources:
-	    -s, --source <n>      which site to use: 1 (default) or 2
-
 	Options:
 	  -c, --continue    Continue watching from history
 	  -d, --download    Download the video instead of playing it
@@ -110,7 +107,6 @@ help_info() {
 	  none       prints the stream url so you can open it yourself
 
 	Environment:
-	  _NIME_SOURCE         which site to use: 1 (default) or 2
 	  _NIME_MODE           sub or dub
 	  _NIME_QUALITY        default quality
 	  _NIME_PLAYER         player command (mpv, vlc, iina, ...)
@@ -219,11 +215,6 @@ check_deps() {
 		print) printf 'player:\n  none found, the stream url will be printed\n' ;;
 		*) printf 'player:\n  %s\n' "$player_function" ;;
 	esac
-	case "${provider:-1}" in
-		2 | anichan) _site_no=2 ;;
-		*) _site_no=1 ;;
-	esac
-	printf 'site default:\n  %s\n' "$_site_no"
 }
 
 # ---------------------------------------------------------------------------
@@ -691,12 +682,27 @@ find_dub_source() {
 # provider dispatch
 # ---------------------------------------------------------------------------
 
-provider_search() {
-	case "$provider" in
-		animesuge) as_search "$1" ;;
-		anichan) ac_search "$1" ;;
-		*) return 1 ;;
-	esac
+# both sources are asked at once and the answers become one list, so a title
+# shows up once and nothing has to be chosen up front. each row keeps the id it
+# needs for its own source in field 1 and names that source in field 3
+search_all_sources() {
+	_tmp="${TMPDIR:-/tmp}/_nime_search.$$"
+	( as_search "$1" 2>/dev/null | while IFS="$TAB" read -r _sl _nm; do
+		[ -n "$_sl" ] && printf '%s\t%s\tanimesuge\n' "$_sl" "$_nm"
+	done >"${_tmp}.a" ) &
+	( ac_search "$1" 2>/dev/null | while IFS="$TAB" read -r _id _nm; do
+		[ -n "$_id" ] && printf '%s\t%s\tanichan\n' "$_id" "$_nm"
+	done >"${_tmp}.b" ) &
+	wait
+	cat "${_tmp}.a" "${_tmp}.b" 2>/dev/null |
+		awk -F'\t' 'NF >= 3 {
+			key = tolower($2)
+			gsub(/[^a-z0-9]/, "", key)
+			if (key == "" || key in seen) next
+			seen[key] = 1
+			print
+		}'
+	rm -f "${_tmp}.a" "${_tmp}.b"
 }
 
 provider_episode_maps() {
@@ -1403,7 +1409,7 @@ load_episode_maps() {
 # main
 # ---------------------------------------------------------------------------
 
-provider="${_NIME_SOURCE:-animesuge}"
+provider=""
 mode="${_NIME_MODE:-dub}"
 quality="${_NIME_QUALITY:-best}"
 menu_program="${_NIME_MENU:-fzf}"
@@ -1429,9 +1435,7 @@ do_check_deps=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 		-s | --source)
-			[ $# -lt 2 ] && die "missing argument!"
-			provider=$2
-			shift
+			die "-s is gone: both sources are searched at once now, just give the title"
 			;;
 		-c | --continue) source=history ;;
 		-d | --download) player_function=download ;;
@@ -1505,12 +1509,6 @@ while [ $# -gt 0 ]; do
 done
 
 query=$(printf '%s' "$query" | sed 's|^ *||;s| *$||')
-
-case "$provider" in
-	1 | animesuge) provider=animesuge ;;
-	2 | anichan) provider=anichan ;;
-	*) die "Unknown site '$provider' (use 1 or 2)" ;;
-esac
 
 if [ "$mode" = dub ] && [ "$dub_lang" != eng ]; then
 	case "$dub_lang" in
@@ -1589,7 +1587,7 @@ info "_nime $version"
 
 if [ "$source" = history ]; then
 	[ -s "$histfile" ] || die "No history yet, watch something first"
-	_entries=$(awk -F'\t' 'NF>=4 { printf "%s\t%s (%s) - episode %s\n", $3, $4, $2, $1 }' "$histfile")
+	_entries=$(awk -F'\t' 'NF>=4 { printf "%s\t%s - episode %s\t%s\n", $3, $4, $1, $2 }' "$histfile")
 
 	if [ -n "$index" ]; then
 		_sel=$(printf '%s\n' "$_entries" | sed -n "${index}p")
@@ -1599,9 +1597,10 @@ if [ "$source" = history ]; then
 	[ -z "$_sel" ] && die "Invalid selection"
 
 	_sel_title=$(printf '%s' "$_sel" | cut -f 2)
-	provider=$(printf '%s' "$_sel_title" | sed -nE 's#.*\((animesuge|anichan)\).*#\1#p')
+	provider=$(printf '%s' "$_sel" | cut -f 3)
 	anime_id=$(printf '%s' "$_sel" | cut -f 1)
-	anime_title=$(printf '%s' "$_sel_title" | sed -E 's# \((animesuge|anichan)\).*##')
+	anime_title=$(printf '%s' "$_sel_title" |
+		sed -E 's# \((animesuge|anichan)\)##; s| - episode [^ ]*$||')
 	ep_no=$(printf '%s' "$_sel_title" | sed -nE 's|.* - episode ([^ ]*)$|\1|p')
 	[ -z "$provider" ] && die "History entry is broken, delete it with -D"
 
@@ -1614,7 +1613,7 @@ else
 	fi
 	info "Searching for '$query'..."
 	_enc_query=$(printf '%s' "$query" | sed 's| |+|g')
-	results=$(provider_search "$_enc_query")
+	results=$(search_all_sources "$_enc_query")
 	[ -z "$results" ] && die "No results found for '$query'"
 
 	if [ -n "$index" ]; then
@@ -1626,6 +1625,8 @@ else
 
 	anime_id=$(printf '%s' "$_sel" | cut -f 1)
 	anime_title=$(printf '%s' "$_sel" | cut -f 2)
+	provider=$(printf '%s' "$_sel" | cut -f 3)
+	[ -z "$provider" ] && provider=animesuge
 
 	if [ "$provider" = animesuge ]; then
 		_resolved=$(as_anime_id "$anime_id") || die "Could not open that anime"

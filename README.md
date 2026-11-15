@@ -2,14 +2,15 @@
 
 `_nime` is a terminal client for watching anime. Search for a show, pick an
 episode from a list, and it resolves the stream and hands it to your player.
-It reads [animesuge.cz](https://animesuge.cz) and
-[anichan.to](https://anichan.to), talks to their player directly — including
-the encrypted stream payload — and runs as a single POSIX shell script with no
-runtime, no build step and no installer.
+It reads the sources it is built around, talks to their player directly —
+including the encrypted stream payload — and runs as a single POSIX shell
+script with no runtime, no build step and no installer.
 
 Everything happens in the terminal: you search, you pick an anime and an
-episode from a list, and the stream is handed to a local player. Nothing is
-installed, no account is needed and no daemon runs in the background.
+episode from a list, and the stream is handed to a local player. Every source it
+knows is searched at once and the answers are merged into one list, so there is
+nothing to choose up front. Nothing is installed, no account is needed and no
+daemon runs in the background.
 
 > **This is a personal project.** It scrapes third party sites. Read
 > [disclaimer.md](disclaimer.md) before using it.
@@ -143,9 +144,10 @@ Found it dubbed: <title>
 ```
 
 The switch only happens when the title actually matches, so it never lands you
-on a different show. The two sites behind it are
-[animesuge.cz](https://animesuge.cz) and [anichan.to](https://anichan.to): when
-one has no dub for a show, the other is checked before falling back to subs. If no source has a dub, it says so and plays the subbed version. Add `--sub` to ask for subs from the start.
+on a different show. The sources are checked in turn: when one has no dub for a
+show, the other is looked at before falling back to subs. If no source has a
+dub, it says so and plays the subbed version. Add `--sub` to ask for subs from
+the start.
 
 Each audio language has its own flag: `-engdub`, `-gerdub`, `-spadub`,
 `-fredub`, `-itadub`, `-pordub`, `-rusdub` and `-aradub`. Only English dubs are
@@ -197,12 +199,6 @@ _nime-dl "<title>" -e 1-40   # the whole run
 window that is already open instead of opening a second one, and quitting the
 menu closes it. The player is handed a control socket for this, which needs
 `python3`; without it every episode simply gets its own window.
-
-The other site:
-
-```sh
-_nime -s 2 "<title>"     # anichan.to
-```
 
 Skip openings and endings automatically:
 
@@ -293,7 +289,6 @@ failing.
 
 | flag | meaning |
 | --- | --- |
-| `-s, --source <n>` | which site to use: `1` ([animesuge.cz](https://animesuge.cz), default) or `2` ([anichan.to](https://anichan.to)) |
 | `-c, --continue` | continue from history |
 | `-d, --download` | download instead of playing |
 | `-D, --delete` | delete history |
@@ -322,7 +317,6 @@ failing.
 
 | variable | meaning |
 | --- | --- |
-| `_NIME_SOURCE` | which site to use: `1` (animesuge.cz, default) or `2` (anichan.to) |
 | `_NIME_MODE` | `dub` (default) or `sub` |
 | `_NIME_QUALITY` | default quality |
 | `_NIME_PLAYER` | player command to use |
