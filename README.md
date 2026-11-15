@@ -51,26 +51,37 @@ never installs anything for you.
 
 ## Install
 
-`_nime` is one shell script plus a two line wrapper. Installing it means putting
-those two files where your shell looks; there is nothing to build and nothing
-keeps running.
-
-1. install the packages for your system
-2. copy the two scripts into a folder on your `PATH`
-3. check that it worked
-
-### 1. Packages
-
-**Arch, CachyOS, Manjaro, EndeavourOS**
+One line, on any system:
 
 ```sh
-sudo pacman -S --needed curl openssl mpv fzf python3 yt-dlp ffmpeg
+curl -fsSL https://raw.githubusercontent.com/optimalguyy/_nime/master/install.sh | sh
 ```
+
+That copies `_nime` and `_nime-dl` into `~/.local/bin`, adds the folder to your
+shell's `PATH` if it is not there yet, installs the man page, and prints
+anything still missing. Run it again later to update, or use `_nime -U`.
+
+### Arch, CachyOS, Manjaro, EndeavourOS
+
+The repository carries a `PKGBUILD`, so pacman can own the files:
+
+```sh
+git clone https://github.com/optimalguyy/_nime.git
+cd _nime
+makepkg -si
+```
+
+It builds the package and installs `_nime`, `_nime-dl` and the man page into
+`/usr`, pulling `curl` and `openssl` with it.
+
+### Packages on other systems
+
+The script itself needs only `curl` and `openssl`; a player and a menu make it
+pleasant. One line per system:
 
 **Debian, Ubuntu, Mint, Pop!_OS**
 
 ```sh
-sudo apt update
 sudo apt install curl openssl mpv fzf python3 yt-dlp ffmpeg
 ```
 
@@ -92,11 +103,8 @@ sudo zypper install curl openssl mpv fzf python3 yt-dlp ffmpeg
 brew install mpv fzf python3 yt-dlp ffmpeg
 ```
 
-IINA is used when it is installed, otherwise mpv:
-
-```sh
-brew install --cask iina
-```
+`brew install --cask iina` adds IINA, which is used in place of mpv when it is
+installed.
 
 **Windows, Git Bash** ([Git for Windows](https://git-scm.com/download/win), with
 [Scoop](https://scoop.sh))
@@ -105,19 +113,18 @@ brew install --cask iina
 scoop install mpv fzf python yt-dlp ffmpeg
 ```
 
-**Windows, WSL2** — run the Debian lines above *inside* WSL and install a Linux
-player there too; `mpv.exe` on the Windows side is not reachable from inside it.
+**Windows, WSL2** — use the Debian line *inside* WSL and install a Linux player
+there too; `mpv.exe` on the Windows side is not reachable from inside it.
 
 **Android, Termux** ([F-Droid](https://f-droid.org/packages/com.termux/))
 
 ```sh
-pkg update
 pkg install git curl openssl mpv fzf python termux-am
 pkg install yt-dlp ffmpeg      # only needed for downloads
 ```
 
-Then install the mpv app from F-Droid as well: `_nime` hands the stream over to
-it. VLC works too with `_nime -v`.
+Install the mpv app from F-Droid as well: `_nime` hands the stream over to it.
+VLC works too, with `_nime -v`.
 
 **iOS, iSH** (App Store)
 
@@ -125,14 +132,12 @@ it. VLC works too with `_nime -v`.
 apk add git curl openssl
 ```
 
-There is no player inside iSH, so `_nime` prints a tappable `vlc://` link
-instead — install VLC from the App Store and tap it.
+There is no player inside iSH, so `_nime` prints a tappable `vlc://` link —
+install VLC from the App Store and tap it.
 
-Only `curl`, `openssl`, `sed`, `grep` and `awk` are required. Everything else
-buys you a menu, a player or downloads, and `_nime` says what it is missing
-rather than failing.
+### Doing it by hand
 
-### 2. Get the files
+If you would rather not run a script, the two files are all there is:
 
 ```sh
 git clone https://github.com/optimalguyy/_nime.git
@@ -142,8 +147,8 @@ cp _nime _nime-dl ~/.local/bin/
 chmod +x ~/.local/bin/_nime ~/.local/bin/_nime-dl
 ```
 
-`~/.local/bin` is already on the `PATH` on most Linux desktops. If `_nime` is
-not found afterwards, add the folder once, for your shell:
+`~/.local/bin` is on the `PATH` on most Linux desktops. If the command is not
+found afterwards, add it once, for your shell:
 
 ```sh
 # bash
@@ -156,8 +161,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 fish_add_path ~/.local/bin
 ```
 
-On **Windows Git Bash** use `~/bin` in place of `~/.local/bin` and add it the
-same way:
+On **Windows Git Bash** use `~/bin` instead:
 
 ```sh
 mkdir -p ~/bin
@@ -165,28 +169,23 @@ cp _nime _nime-dl ~/bin/
 echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 ```
 
-A system wide copy works too, for every user on the machine:
+System wide, for every user on the machine, with the man page:
 
 ```sh
 sudo cp _nime _nime-dl /usr/local/bin/
-```
-
-The man page is optional:
-
-```sh
 sudo cp _nime.1 /usr/local/share/man/man1/
 sudo mandb
 ```
 
-### 3. Check it
+### Check it
 
 ```sh
 _nime --check-deps
 _nime -V
 ```
 
-The first command lists every dependency as `ok` or `absent`, so you can see
-what is still missing instead of guessing. The second prints the version.
+The first lists every dependency as `ok` or `absent`, so nothing has to be
+guessed. The second prints the version.
 
 ### Update
 
@@ -195,8 +194,7 @@ _nime -U
 ```
 
 That downloads the newest copy, compares the version line, and replaces the
-installed file while keeping the old one next to it as `_nime.bak`. It needs
-`_nime` to be on your `PATH` so it can find itself.
+installed file while keeping the old one next to it as `_nime.bak`.
 
 ## Commands
 
