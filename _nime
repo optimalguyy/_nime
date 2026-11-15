@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.3"
+version="1.8.4"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1252,7 +1252,12 @@ download_video() {
 		# the progress lines become one bar, everything else goes to a log so a
 		# failure can say what actually went wrong
 		(
+			# the stream is a list of small fragments and yt-dlp fetches them one at
+			# a time by default, which leaves the line idle; a handful in flight at
+			# once roughly doubles the speed, and the retries ride out the rate
+			# limiting that more than that provokes
 			yt-dlp --newline --progress --referer "$refr" -f "$_fmt" --merge-output-format mp4 \
+				-N 4 --fragment-retries 20 --retries 10 --retry-sleep 2 \
 				-o "$_tmpd/raw.%(ext)s" "$video_link" 2>&1
 			printf 'rc=%s\n' "$?" >"$_tmpd/rc"
 		) | while IFS= read -r _line; do

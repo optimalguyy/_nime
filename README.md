@@ -350,6 +350,10 @@ Downloads use the audio you asked for — the dubbed track by default, the
 original one with `--sub` — so a downloaded file sounds like the version you
 picked, not whichever track the stream lists first.
 
+Episodes are fetched as several pieces at once rather than one at a time, which
+on a typical connection is most of the difference between a two minute download
+and a four minute one.
+
 While an episode downloads you get one line that updates in place — a bar, the
 percentage, the speed and the time left — and if a download fails it says why
 instead of just stopping.
