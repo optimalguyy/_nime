@@ -98,11 +98,11 @@ One command per job, so you never have to remember a flag:
 | `_nime-dl` | same menus, but saves the episode |
 
 ```sh
-_nime                     # search prompt, then play
-_nime frieren             # play
-_nime frieren -e 3        # play episode 3
-_nime-dl frieren          # download
-_nime-dl frieren -e 1-5   # download episodes 1 to 5
+_nime                       # search prompt, then play
+_nime "<title>"             # play
+_nime "<title>" -e 3        # play episode 3
+_nime-dl "<title>"          # download
+_nime-dl "<title>" -e 1-5   # download episodes 1 to 5
 ```
 
 `_nime-dl` is the same program with `--download` already set, so every option
@@ -120,13 +120,13 @@ Typing `_nime` on its own gives you a search bar: type a title, press enter, and
 the anime list appears. Or pass the name directly:
 
 ```sh
-_nime frieren
+_nime "<title>"
 ```
 
 Pick from the menu:
 
 ```sh
-_nime frieren
+_nime "<title>"
 ```
 
 Dubs are the default. If the source you picked has no dub for that show,
@@ -134,7 +134,7 @@ Dubs are the default. If the source you picked has no dub for that show,
 
 ```
 No dub here, checking anichan...
-Switched to anichan: Naruto Shippuden the Movie: Blood Prison (dubbed)
+Switched to anichan: <title, as the other site spells it> (dubbed)
 ```
 
 The switch only happens when the title actually matches, so it never lands you
@@ -146,7 +146,7 @@ served by the sources `_nime` can read, so `-gerdub` and the rest stop with a
 message that says exactly that, instead of playing the wrong audio.
 
 ```sh
-_nime --sub frieren
+_nime --sub "<title>"
 ```
 
 Continue where you left off:
@@ -158,32 +158,32 @@ _nime -c
 A specific episode, or a range:
 
 ```sh
-_nime -e 5 frieren
-_nime -e 1-3 frieren
+_nime -e 5 "<title>"
+_nime -e 1-3 "<title>"
 ```
 
 The other source:
 
 ```sh
-_nime -s anichan frieren
+_nime -s anichan "<title>"
 ```
 
 Skip openings and endings automatically:
 
 ```sh
-_nime --skip frieren
+_nime --skip "<title>"
 ```
 
 Watch together with someone else:
 
 ```sh
-_nime --syncplay frieren
+_nime --syncplay "<title>"
 ```
 
 Download instead of playing:
 
 ```sh
-_nime -d -e 1-3 frieren
+_nime -d -e 1-3 "<title>"
 ```
 
 ## Downloads
@@ -211,7 +211,7 @@ If `ffmpeg` is missing, the subtitles cannot be embedded and are saved next to
 the video as `<title>_E<episode>.en.vtt` instead.
 
 ```sh
-_nime -d -e 1-3 frieren       # three files in ~/Downloads/_nime downloads
+_nime -d -e 1-3 "<title>"     # three files in ~/Downloads/_nime downloads
 ```
 
 ### Subtitle languages
@@ -221,7 +221,7 @@ Italian, Portuguese, Russian, Spanish, sometimes regional variants. Look at what
 an episode has:
 
 ```sh
-_nime --list-subs -e 1 frieren
+_nime --list-subs -e 1 "<title>"
 ```
 
 ```
@@ -236,10 +236,10 @@ Subtitles for episode 1:
 Then pick one, either by language code or by name:
 
 ```sh
-_nime -d -e 1 --sub-lang ger frieren      # German only
-_nime -d -e 1 --sub-lang german frieren   # same thing
-_nime --sub-lang spa frieren              # play with Spanish subtitles
-_nime -d -e 1 --sub-lang all frieren      # embed all nine tracks
+_nime -d -e 1 --sub-lang ger "<title>"    # German only
+_nime -d -e 1 --sub-lang german "<title>" # same thing
+_nime --sub-lang spa "<title>"            # play with Spanish subtitles
+_nime -d -e 1 --sub-lang all "<title>"    # embed all nine tracks
 ```
 
 Without the flag you get the track the source marks as default, which is

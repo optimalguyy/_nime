@@ -34,7 +34,7 @@ purpose so it stays readable. When something breaks:
 
 ```sh
 # see what the endpoint actually returns
-curl -sSL -A "$AGENT" 'https://animesuge.cz/ajax/anime/search?keyword=frieren' \
+curl -sSL -A "$AGENT" 'https://animesuge.cz/ajax/anime/search?keyword=<title>' \
   -H 'X-Requested-With: XMLHttpRequest' | head -c 2000
 ```
 
