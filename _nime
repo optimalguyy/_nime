@@ -12,12 +12,13 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.0.1"
+version="1.0.2"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
 repo_branch="${_NIME_BRANCH:-master}"
 update_base="https://raw.githubusercontent.com/${repo_user}/_nime/${repo_branch}"
+api_base="https://api.github.com/repos/${repo_user}/_nime/contents"
 
 TAB=$(printf '\t')
 req_deps="curl sed grep awk openssl"
@@ -965,8 +966,17 @@ update_script() {
 		'' | *CHANGE_ME*) die "Set repo_user at the top of this script (or _NIME_USER=you) before using -U" ;;
 	esac
 	info "[$repo_branch] Checking for updates..."
-	_latest=$(curl -sSL --fail-with-body --max-time 25 "$update_base/_nime") ||
-		die "[$repo_branch] Connection error"
+	# the contents api is authoritative and never stale; the raw host sits
+	# behind a cdn that can serve the previous version for a few minutes
+	_latest=$(curl -sSL --max-time 25 -H "Accept: application/vnd.github.raw" \
+		"$api_base/_nime?ref=$repo_branch" 2>/dev/null)
+	case "$_latest" in
+		*'version="'*) ;;
+		*)
+			_latest=$(curl -sSL --max-time 25 "$update_base/_nime" 2>/dev/null)
+			;;
+	esac
+	[ -z "$_latest" ] && die "[$repo_branch] Connection error"
 	_new_version=$(printf '%s' "$_latest" | sed -nE 's|^version="([^"]+)"$|\1|p' | head -n 1)
 	[ -z "$_new_version" ] && die "[$repo_branch] Invalid response"
 
