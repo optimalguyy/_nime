@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.6.4"
+version="1.6.5"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1249,6 +1249,7 @@ play_episode() {
 	esac
 
 	if [ "$player_running" = 1 ] && [ "$player_ipc" = 1 ] && [ -n "$player_sock" ]; then
+		player_cmd "{\"command\":[\"set_property\",\"alang\",\"$audio_lang\"]}"
 		player_cmd "{\"command\":[\"loadfile\",\"$(json_escape "$video_link")\",\"replace\"]}"
 		[ -n "$sub_link" ] && player_cmd "{\"command\":[\"sub-add\",\"$(json_escape "$sub_link")\",\"select\"]}"
 		player_cmd "{\"command\":[\"set_property\",\"media-title\",\"$(json_escape "$anime_title $ep_label")\"]}"
@@ -1287,18 +1288,18 @@ play_episode() {
 			fi
 			;;
 		*flatpak*mpv*)
-			nohup flatpak run io.mpv.Mpv --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
+			nohup flatpak run io.mpv.Mpv --input-ipc-server="$player_sock" --referrer="$refr" --alang="$audio_lang" ${sub_link:+--sub-file="$sub_link"} \
 				$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" \
 				"$video_link" >/dev/null 2>&1 &
 			;;
 		*iina*)
 			_sub_iina=$(printf '%s' "$sub_link" | sed 's|:|\\:|g')
 			if pgrep -f "IINA" >/dev/null 2>&1; then
-				nohup $player_function --mpv-referrer="$refr" ${_sub_iina:+--mpv-sub-files="$_sub_iina"} \
+				nohup $player_function --mpv-referrer="$refr" --mpv-alang="$audio_lang" ${_sub_iina:+--mpv-sub-files="$_sub_iina"} \
 					$skip_flag $player_extra_flags --no-stdin \
 					--mpv-force-media-title="$anime_title $ep_label" "$video_link" >/dev/null 2>&1 &
 			else
-				nohup $player_function --mpv-referrer="$refr" ${_sub_iina:+--mpv-sub-files="$_sub_iina"} \
+				nohup $player_function --mpv-referrer="$refr" --mpv-alang="$audio_lang" ${_sub_iina:+--mpv-sub-files="$_sub_iina"} \
 					$skip_flag $player_extra_flags --no-stdin --keep-running \
 					--mpv-force-media-title="$anime_title $ep_label" "$video_link" >/dev/null 2>&1 &
 			fi
@@ -1310,10 +1311,10 @@ play_episode() {
 			;;
 		*mpv*)
 			if [ "$no_detach" = 1 ]; then
-				$player_function --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
+				$player_function --input-ipc-server="$player_sock" --referrer="$refr" --alang="$audio_lang" ${sub_link:+--sub-file="$sub_link"} \
 					$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" "$video_link"
 			else
-				nohup $player_function --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
+				nohup $player_function --input-ipc-server="$player_sock" --referrer="$refr" --alang="$audio_lang" ${sub_link:+--sub-file="$sub_link"} \
 					$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" \
 					"$video_link" >/dev/null 2>&1 &
 			fi
@@ -1321,11 +1322,11 @@ play_episode() {
 		*vlc*)
 			if [ "$no_detach" = 1 ]; then
 				$player_function --http-referrer="$refr" $player_extra_flags --play-and-exit \
-					--meta-title="$anime_title $ep_label" "$video_link" \
+					--meta-title="$anime_title $ep_label" --audio-language="$audio_lang_short" "$video_link" \
 					:input-slave="${sub_link:-}"
 			else
 				nohup $player_function --http-referrer="$refr" $player_extra_flags --play-and-exit \
-					--meta-title="$anime_title $ep_label" "$video_link" \
+					--meta-title="$anime_title $ep_label" --audio-language="$audio_lang_short" "$video_link" \
 					:input-slave="${sub_link:-}" >/dev/null 2>&1 &
 			fi
 			;;
@@ -1565,6 +1566,13 @@ while [ $# -gt 0 ]; do
 done
 
 query=$(printf '%s' "$query" | sed 's|^ *||;s| *$||')
+
+# the stream itself usually offers both audio tracks and the player picks the
+# original by default, so say which language is wanted
+case "$mode" in
+	dub) audio_lang="eng,en" ; audio_lang_short=en ;;
+	*) audio_lang="jpn,ja" ; audio_lang_short=ja ;;
+esac
 
 if [ "$mode" = dub ] && [ "$dub_lang" != eng ]; then
 	case "$dub_lang" in
