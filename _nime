@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.1.0"
+version="1.1.1"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -49,6 +49,7 @@ version_info() {
 help_info() {
 	cat <<-EOF
 	Usage:
+	    _nime                      (opens a search prompt)
 	    _nime [options] [query]
 	    _nime [query] [options]
 	    _nime [options] [query] [options]
@@ -226,17 +227,18 @@ html_decode() {
 nth() {
 	_prompt=$1
 	_multi=$2
-	_list=$(cat)
+	_list=$3
+	[ -z "$_list" ] && return 1
 
 	if [ "$menu_program" = fzf ]; then
 		# no --height: fzf takes over the whole terminal on its own screen and
 		# hands it back on exit, so the menu feels like its own window
 		if [ -n "$_multi" ]; then
 			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
-				--with-nth=2.. -m $menu_extra_flags --prompt "$_prompt > " | cut -f 1
+				--with-nth=2.. -m $menu_extra_flags --prompt "$_prompt > "
 		else
 			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
-				--with-nth=2.. $menu_extra_flags --prompt "$_prompt > " | cut -f 1
+				--with-nth=2.. $menu_extra_flags --prompt "$_prompt > "
 		fi
 		return
 	fi
@@ -248,8 +250,20 @@ nth() {
 		case "$_choice" in
 			'' | *[!0-9]*) return 1 ;;
 		esac
-		printf '%s\n' "$_list" | sed -n "${_choice}p" | cut -f 1
+		printf '%s\n' "$_list" | sed -n "${_choice}p"
 	done
+}
+
+# ask for a search term when _nime is started with no query
+ask_query() {
+	if [ "$menu_program" = fzf ]; then
+		printf '' | fzf --print-query --reverse --prompt 'Search anime > ' \
+			--header 'type a title and press enter, esc to quit' 2>/dev/null | head -n 1
+	else
+		printf 'Search anime: ' >&2
+		read -r _q || _q=""
+		printf '%s' "$_q"
+	fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1175,7 +1189,7 @@ if [ "$source" = history ]; then
 	if [ -n "$index" ]; then
 		_sel=$(printf '%s\n' "$_entries" | sed -n "${index}p")
 	else
-		_sel=$(printf '%s\n' "$_entries" | nth "Select anime")
+		_sel=$(nth "Select anime" "" "$_entries")
 	fi
 	[ -z "$_sel" ] && die "Invalid selection"
 
@@ -1188,7 +1202,11 @@ if [ "$source" = history ]; then
 
 	load_episode_maps || die "Could not load episodes for that entry"
 else
-	[ -z "$query" ] && die "No query given (try _nime -h)"
+	if [ -z "$query" ]; then
+		query=$(ask_query)
+		query=$(printf '%s' "$query" | sed 's|^ *||;s| *$||')
+		[ -z "$query" ] && die "No search term given"
+	fi
 	info "Searching $provider for '$query'..."
 	_enc_query=$(printf '%s' "$query" | sed 's| |+|g')
 	results=$(provider_search "$_enc_query")
@@ -1197,7 +1215,7 @@ else
 	if [ -n "$index" ]; then
 		_sel=$(printf '%s\n' "$results" | sed -n "${index}p")
 	else
-		_sel=$(printf '%s\n' "$results" | nth "Select anime")
+		_sel=$(nth "Select anime" "" "$results")
 	fi
 	[ -z "$_sel" ] && die "Invalid anime selection"
 
@@ -1214,7 +1232,7 @@ else
 fi
 
 if [ -z "$ep_no" ]; then
-	ep_no=$(printf '%s\n' "$episode_maps" | awk -F'\t' '{ printf "%s\tepisode %s\n", $1, $1 }' | nth "Select episode")
+	ep_no=$(nth "Select episode" "" "$(printf '%s\n' "$episode_maps" | awk -F'\t' '{ printf "%s\tepisode %s\n", $1, $1 }')" | cut -f 1)
 	[ -z "$ep_no" ] && die "Invalid episode selection"
 fi
 
@@ -1225,8 +1243,8 @@ play "$ep_no"
 # ---------------------------------------------------------------------------
 
 while [ "$player_function" != download ] && [ "$player_function" != print ]; do
-	_cmd=$(printf 'next\tnext\nreplay\treplay\nprevious\tprevious\nselect\tselect\nquit\tquit\n' |
-		nth "Playing episode $ep_no of $anime_title")
+	_cmd=$(nth "Playing episode $ep_no of $anime_title" "" \
+		"$(printf 'next\tnext\nreplay\treplay\nprevious\tprevious\nselect\tselect\nquit\tquit')" | cut -f 1)
 	case "$_cmd" in
 		next) ep_no=$(printf '%s\n' "$ep_list" | sed -n "/^${ep_no}$/{n;p;}") ;;
 		previous) ep_no=$(printf '%s\n' "$ep_list" | sed -n "/^${ep_no}$/{g;1!p;};h") ;;
@@ -1236,7 +1254,7 @@ while [ "$player_function" != download ] && [ "$player_function" != print ]; do
 			play_episode
 			continue
 			;;
-		select) ep_no=$(printf '%s\n' "$episode_maps" | awk -F'\t' '{ printf "%s\tepisode %s\n", $1, $1 }' | nth "Select episode") ;;
+		select) ep_no=$(nth "Select episode" "" "$(printf '%s\n' "$episode_maps" | awk -F'\t' '{ printf "%s\tepisode %s\n", $1, $1 }')" | cut -f 1) ;;
 		*) break ;;
 	esac
 	[ -z "$ep_no" ] && {

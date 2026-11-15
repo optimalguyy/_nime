@@ -90,13 +90,28 @@ replaces the installed copy while keeping the old one as `_nime.bak`. Set
 ## Usage
 
 ```sh
+_nime                    # opens a search prompt
 _nime [options] [query]
 ```
 
-Search, then pick from the menu:
+Typing `_nime` on its own gives you a search bar: type a title, press enter, and
+the anime list appears. Or pass the name directly:
 
 ```sh
 _nime frieren
+```
+
+Pick from the menu:
+
+```sh
+_nime frieren
+```
+
+Dubs are the default. If a show has no dub, `_nime` says so and plays the
+subbed version instead; add `--sub` to ask for subs from the start.
+
+```sh
+_nime --sub frieren
 ```
 
 Continue where you left off:
@@ -212,7 +227,8 @@ failing.
 | `-q, --quality <q>` | `best`, `worst`, `1080`, `720`, ... |
 | `-S, --select-nth <n>` | pick the nth entry without a menu |
 | `-v, --vlc` | use VLC |
-| `--dub` | dubbed audio |
+| `--dub` | dubbed audio (**default**) |
+| `--sub` | subtitled instead of dubbed |
 | `--skip` | skip intros and outros (mpv) |
 | `--sub-lang <lang>` | subtitle language, as a code (`eng`, `ger`, `spa`) or a name (`german`); `all` embeds every track when downloading |
 | `--list-subs` | list the subtitle tracks of an episode and exit |
@@ -228,7 +244,7 @@ failing.
 | variable | meaning |
 | --- | --- |
 | `_NIME_SOURCE` | default source |
-| `_NIME_MODE` | `sub` or `dub` |
+| `_NIME_MODE` | `dub` (default) or `sub` |
 | `_NIME_QUALITY` | default quality |
 | `_NIME_PLAYER` | player command to use |
 | `_NIME_PLAYER_FLAGS` | extra flags for the player |
