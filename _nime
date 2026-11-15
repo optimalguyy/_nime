@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.7.2"
+version="1.7.3"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -115,7 +115,7 @@ help_info() {
 	  _NIME_PLAYER_FLAGS   extra flags handed to the player
 	  _NIME_MENU           fzf (default) or none for a numbered prompt
 	  _NIME_HIST_DIR       where the history file lives
-	  _NIME_DOWNLOAD_DIR   where downloads go (default: <Downloads>/_nime downloads)
+	  _NIME_DOWNLOAD_DIR   where downloads go (default: your Downloads folder)
 	  _NIME_SKIP           set to 1 to always skip intros and outros
 	  _NIME_SUB_LANG       default subtitle language
 	  _NIME_COLOR          set to 0 to disable colours
@@ -1115,8 +1115,8 @@ update_history() {
 # playback
 # ---------------------------------------------------------------------------
 
-# where downloads land: <user folder>/_nime downloads
-# the folder is the first one that exists: an XDG download dir, Downloads,
+# where downloads land: the folder the desktop itself uses, so nothing has to
+# be picked. it is the first one that exists: an XDG download dir, Downloads,
 # Desktop, otherwise home. _NIME_DOWNLOAD_DIR overrides all of it.
 download_dir() {
 	if [ -n "$_NIME_DOWNLOAD_DIR" ]; then
@@ -1151,7 +1151,7 @@ download_dir() {
 	fi
 
 	[ -z "$_base" ] && _base=$(pwd)
-	printf '%s/_nime downloads' "$_base"
+	printf '%s' "$_base"
 }
 
 # downloads are written as mp4 with the subtitles muxed in as a soft

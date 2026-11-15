@@ -326,8 +326,8 @@ _nime -d -e 1-3 "<title>"
 
 ## Downloads
 
-`_nime -d` writes into a folder called `_nime downloads`, inside whichever
-folder your system calls downloads:
+`_nime -d` writes straight into the folder your desktop calls downloads, so
+there is nothing to pick and no folder of its own to dig out of:
 
 1. `_NIME_DOWNLOAD_DIR`, if you set it,
 2. the XDG download dir from `~/.config/user-dirs.dirs`,
@@ -335,8 +335,7 @@ folder your system calls downloads:
 4. `~/Desktop`,
 5. your home directory.
 
-On Android that is `/storage/emulated/0/Download/_nime downloads`. The folder is
-created if it does not exist, and every file is named
+On Android that is `/storage/emulated/0/Download`. Files are named
 `<title>_E<episode>.mp4`.
 
 Downloads are `.mp4` with the subtitles **muxed into the file** as a soft track,
@@ -349,7 +348,7 @@ If `ffmpeg` is missing, the subtitles cannot be embedded and are saved next to
 the video as `<title>_E<episode>.en.vtt` instead.
 
 ```sh
-_nime -d -e 1-3 "<title>"     # three files in ~/Downloads/_nime downloads
+_nime -d -e 1-3 "<title>"     # three files in ~/Downloads
 ```
 
 ### Subtitle languages
@@ -432,7 +431,7 @@ failing.
 | `_NIME_PLAYER_FLAGS` | extra flags for the player |
 | `_NIME_MENU` | `fzf` (default) or `none` |
 | `_NIME_HIST_DIR` | history directory |
-| `_NIME_DOWNLOAD_DIR` | where downloads go (default: `<download folder>/_nime downloads`) |
+| `_NIME_DOWNLOAD_DIR` | where downloads go (default: your downloads folder) |
 | `_NIME_SKIP` | `1` to always skip intros and outros |
 | `_NIME_SUB_LANG` | default subtitle language |
 | `_NIME_COLOR` | `0` to disable colours |

@@ -1,4 +1,4 @@
-.TH _NIME 1 "2026-11" "_nime 1.7.2" "User Commands"
+.TH _NIME 1 "2026-11" "_nime 1.7.3" "User Commands"
 .SH NAME
 _nime \- browse and watch anime from the terminal
 .SH SYNOPSIS
@@ -141,9 +141,8 @@ Directory holding the history file. Defaults to
 \fI$XDG_STATE_HOME/_nime\fR.
 .TP
 .B _NIME_DOWNLOAD_DIR
-Directory downloads are written to. Defaults to a folder named
-\fI_nime downloads\fR inside the XDG download dir, \fI~/Downloads\fR,
-\fI~/Desktop\fR or the home directory, whichever exists first.
+Directory downloads are written to. Defaults to the XDG download dir,
+\fI~/Downloads\fR, \fI~/Desktop\fR or the home directory, whichever exists first.
 .TP
 .B _NIME_SKIP
 Set to \fI1\fR to always skip intros and outros.
@@ -165,7 +164,7 @@ id and the title.
 .I $XDG_CACHE_HOME/_nime/nime-skip.lua
 Generated mpv script used by \fB\-\-skip\fR.
 .TP
-.I <download folder>/_nime downloads/
+.I <download folder>/
 Where \fB\-\-download\fR writes. Files are mp4 with the subtitles muxed in as a
 selectable soft track.
 .SH EXAMPLES
