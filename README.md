@@ -168,6 +168,28 @@ _nime -e 5 "<title>"
 _nime -e 1-3 "<title>"
 ```
 
+### Seasons
+
+A series is usually split into one entry per season. `_nime` looks up every
+season of the show you picked and puts all of its episodes in a single list, so
+you never have to search for "season 2" yourself:
+
+```
+2 seasons, 38 episodes
+1) S1 E1
+2) S1 E2
+...
+29) S2 E1
+```
+
+Numbering runs straight through the seasons, so ranges and `-e` work the same
+way they always did:
+
+```sh
+_nime "<title>" -e 30        # episode 30 overall, whichever season that lands in
+_nime-dl "<title>" -e 1-40   # the whole run
+```
+
 The other site:
 
 ```sh

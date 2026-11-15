@@ -21,6 +21,10 @@ hands it to a local player. It scrapes the site, talks to its player directly,
 including the encrypted stream payload, which it decrypts with
 .BR openssl (1).
 .PP
+A series that the site splits into one entry per season is put back together:
+every season is looked up and their episodes are listed as one run, numbered
+straight through, with the season shown in front of each episode number.
+.PP
 When no player is available it prints the stream url, the subtitle url and the
 required referer instead of failing.
 .SH OPTIONS

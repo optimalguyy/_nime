@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.3.3"
+version="1.4.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -454,8 +454,146 @@ titles_match() {
 
 # look for the show we already picked on the other sources, and switch to the
 # first one that actually has it dubbed
+# the title with season markers and bracketed tags stripped, so "Show" and
+# "Show Season 2" are recognised as the same series
+season_base() {
+	_b=$(printf ' %s ' "$1" | tr 'A-Z' 'a-z' |
+		sed 's/([^)]*)//g; s/\[[^]]*\]//g;
+			s/ final season / /g;
+			s/ [0-9][0-9]*\(st\|nd\|rd\|th\) season / /g;
+			s/ season \(one\|two\|three\|four\|five\|six\|seven\|eight\|nine\|ten\) / /g;
+			s/ season[[:space:]]*[0-9][0-9]* / /g;
+			s/ part[[:space:]]*[0-9][0-9]* / /g')
+	printf '%s' "$_b" | sed 's/[^a-z0-9]/ /g; s/  */ /g; s/^ //; s/ $//'
+}
+
+# which season a title belongs to, one when it says nothing
+season_no() {
+	_t=$(printf '%s' "$1" | tr 'A-Z' 'a-z')
+	_n=$(printf '%s' "$_t" | sed -n 's/.*season[[:space:]]*\([0-9][0-9]*\).*/\1/p' | head -n 1)
+	[ -z "$_n" ] && _n=$(printf '%s' "$_t" | sed -n 's/.*\([0-9][0-9]*\)\(st\|nd\|rd\|th\)[[:space:]]*season.*/\1/p' | head -n 1)
+	if [ -z "$_n" ]; then
+		_w=$(printf '%s' "$_t" | sed -n 's/.*season[[:space:]]*\(one\|two\|three\|four\|five\|six\|seven\|eight\|nine\|ten\).*/\1/p' | head -n 1)
+		case "$_w" in
+			one) _n=1 ;; two) _n=2 ;; three) _n=3 ;; four) _n=4 ;; five) _n=5 ;;
+			six) _n=6 ;; seven) _n=7 ;; eight) _n=8 ;; nine) _n=9 ;; ten) _n=10 ;;
+		esac
+	fi
+	printf '%s' "${_n:-1}"
+}
+
+# a search term the sites accept: plain ascii words joined with plus. one of
+# them answers 400 to anything else, which silently kills a lookup
+season_query() {
+	printf '%s' "$1" | LC_ALL=C sed 's/[^A-Za-z0-9 ]/ /g; s/  */ /g; s/^ //; s/ $//' | tr ' ' '+'
+}
+
+# every result for a query, not just the handful the search box shows.
+# the page lists poster links and titles separately but in the same order,
+# so both are pulled out and zipped back together
+as_search_all() {
+	_p=1
+	while [ "$_p" -le 3 ]; do
+		_page=$(http_get "$base_as/filter?keyword=$1&page=$_p") || return 1
+		[ -z "$_page" ] && break
+		_page=$(printf '%s' "$_page" | unescape)
+		_slugs=$(printf '%s' "$_page" | grep -oE '/anime/[a-zA-Z0-9_-]+/ep-' |
+			sed 's|/anime/||; s|/ep-||' | awk '!seen[$0]++')
+		[ -z "$_slugs" ] && break
+		_names=$(printf '%s' "$_page" | tr '\n' ' ' |
+			grep -oE '<div class="name">[^<]*<a [^>]*>[^<]*</a>' |
+			sed -E 's|.*>([^<]*)</a>|\1|' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+		_tmp="${TMPDIR:-/tmp}/_nime_asall.$$"
+		printf '%s\n' "$_slugs" >"${_tmp}.s"
+		printf '%s\n' "$_names" >"${_tmp}.n"
+		paste "${_tmp}.s" "${_tmp}.n" | while IFS="$TAB" read -r _sl _nm; do
+			[ -z "$_sl" ] && continue
+			printf '%s\t%s\n' "$_sl" "$(printf '%s' "$_nm" | html_decode)"
+		done
+		rm -f "${_tmp}.s" "${_tmp}.n"
+		_p=$((_p + 1))
+	done
+}
+
+# the seasons of the show we picked, one line each: id, title, season number,
+# and 1 when it is the entry the user chose
+provider_seasons() {
+	_base=$(season_base "$2")
+	[ -z "$_base" ] && return 1
+	case "$provider" in
+		animesuge)
+			as_search_all "$1" | while IFS="$TAB" read -r _sid _name; do
+				[ "$(season_base "$_name")" = "$_base" ] || continue
+				_flag=0
+				[ "$_name" = "$anime_title" ] && _flag=1
+				printf '%s\t%s\t%s\t%s\n' "$_sid" "$_name" "$(season_no "$_name")" "$_flag"
+			done
+			;;
+		anichan)
+			ac_search "$1" | while IFS="$TAB" read -r _sid _name; do
+				[ "$(season_base "$_name")" = "$_base" ] || continue
+				_flag=0
+				[ "$_name" = "$anime_title" ] && _flag=1
+				printf '%s\t%s\t%s\t%s\n' "$_sid" "$_name" "$(season_no "$_name")" "$_flag"
+			done
+			;;
+	esac
+}
+
+# every episode of every season in one list. the label stays a plain number,
+# because that is what -e, ranges and next/previous work with; the fifth field
+# keeps the "S2 E5" wording for the menus
+merge_season_maps() {
+	# search for the series without its season marker, so every season is reachable
+	_seasons=$(provider_seasons "$(season_query "$(season_base "$anime_title")")" "$anime_title")
+	[ -z "$_seasons" ] && return 1
+	_seasons=$(printf '%s\n' "$_seasons" | sort -t"$TAB" -k3,3n -k4,4r | awk -F"$TAB" '!seen[$3]++')
+	[ -z "$_seasons" ] && return 1
+
+	_tmp="${TMPDIR:-/tmp}/_nime_seasons.$$"
+	printf '%s\n' "$_seasons" >"$_tmp"
+	_off=0
+	_used=0
+	_blocks=""
+	while IFS="$TAB" read -r _sid _stitle _sno _flag; do
+		[ -z "$_sid" ] && continue
+		case "$provider" in
+			animesuge)
+				_id=$(as_anime_id "$_sid") || continue
+				[ -z "$_id" ] && continue
+				;;
+			*) _id=$_sid ;;
+		esac
+		_maps=$(provider_episode_maps "$_id")
+		[ -z "$_maps" ] && continue
+		_cnt=$(printf '%s\n' "$_maps" | grep -c .)
+		_used=$((_used + 1))
+		_blocks="${_blocks}$(printf '%s\n' "$_maps" |
+			awk -F"$TAB" -v off="$_off" -v id="$_id" -v s="$_sno" \
+				'{ printf "%d\t%s\t%s\t%s\tS%s E%s\n", NR+off, $2, id, $1, s, $1 }')
+"
+		_off=$((_off + _cnt))
+	done <"$_tmp"
+	rm -f "$_tmp"
+	[ "$_off" -gt 0 ] || return 1
+	season_total=$_used
+	episode_maps=$_blocks
+	[ "$_used" -gt 1 ]
+}
+
+# how to name an episode in prompts: "S2 E5" once seasons are merged
+ep_display() {
+	_row=$(printf '%s\n' "$episode_maps" | grep -m 1 "^$1${TAB}")
+	_l=$(printf '%s' "$_row" | cut -f 5)
+	if [ "${season_total:-1}" -gt 1 ] && [ -n "$_l" ]; then
+		printf '%s' "$_l"
+	else
+		printf 'Episode %s' "$1"
+	fi
+}
+
 find_dub_source() {
-	_q=$(printf '%s' "$anime_title" | sed 's| |+|g')
+	_q=$(season_query "$anime_title")
 	for _src in animesuge anichan; do
 		[ "$_src" = "$provider" ] && continue
 		case "$_src" in
@@ -512,11 +650,18 @@ provider_episode_maps() {
 }
 
 provider_embed() {
+	# <label>: read the episode row, because a merged list mixes seasons and each
+	# season is a separate entry on the site
+	_row=$(printf '%s\n' "$episode_maps" | grep -m 1 "^$1${TAB}")
+	[ -z "$_row" ] && return 1
+	_ids=$(printf '%s' "$_row" | cut -f 2)
+	_entry=$(printf '%s' "$_row" | cut -f 3)
+	_local=$(printf '%s' "$_row" | cut -f 4)
+	[ -z "$_entry" ] && _entry=$anime_id
+	[ -z "$_local" ] && _local=$1
 	case "$provider" in
 		animesuge)
-			_ids=$(printf '%s\n' "$episode_maps" | grep -m 1 "^$2${TAB}")
-			_ids=${_ids#*"$TAB"}
-			[ -z "$_ids" ] && return 1
+			[ -z "$_ids" ] || [ "$_ids" = "-" ] && return 1
 			_servers=$(as_servers "$_ids")
 			[ -z "$_servers" ] && return 1
 			_total=$(printf '%s\n' "$_servers" | grep -c .)
@@ -535,7 +680,7 @@ provider_embed() {
 			return 1
 			;;
 		anichan)
-			printf 'https://megaplay.buzz/stream/ani/%s/%s/%s' "$1" "$2" "$mode"
+			printf 'https://megaplay.buzz/stream/ani/%s/%s/%s' "$_entry" "$_local" "$mode"
 			;;
 		*) return 1 ;;
 	esac
@@ -611,7 +756,7 @@ pick_sub() {
 
 # resolve_episode <id> <ep> : sets video_link, sub_link, links, refr and the skip marks
 resolve_episode() {
-	_embed=$(provider_embed "$1" "$2") || return 1
+	_embed=$(provider_embed "$2") || return 1
 	[ -z "$_embed" ] && return 1
 	refr="https://megaplay.buzz/"
 	intro_start=0
@@ -619,7 +764,7 @@ resolve_episode() {
 	outro_start=0
 	outro_end=0
 
-	info "Resolving episode $2..."
+	info "Resolving $(ep_display "$2")..."
 	_page=$(http_get "$_embed" "$base_as") || return 1
 	_file_id=$(printf '%s' "$_page" | grep -oE 'data-id="[0-9]+"' | head -n 1 | grep -oE '[0-9]+')
 	if [ -z "$_file_id" ]; then
@@ -965,7 +1110,7 @@ android_mpv() {
 		printf 'referrer=%s\n%s\n' "$refr" "${sub_link:+sub-file=$sub_link}" >"$_conf_dir/mpv.config.mp4"
 	fi
 	nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
-		-n is.xyz.mpv/.MPVActivity -e "title" "$anime_title Episode $ep_no" \
+		-n is.xyz.mpv/.MPVActivity -e "title" "$anime_title $ep_label" \
 		$player_extra_flags >/dev/null 2>&1 &
 }
 
@@ -977,6 +1122,7 @@ print_stream() {
 }
 
 play_episode() {
+	ep_label=$(ep_display "$ep_no")
 	if [ "$player_function" = download ]; then
 		download_video
 		unset video_link
@@ -1001,12 +1147,12 @@ play_episode() {
 			if need_am; then
 				nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
 					-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
-					-e "title" "$anime_title Episode $ep_no" $player_extra_flags >/dev/null 2>&1 &
+					-e "title" "$anime_title $ep_label" $player_extra_flags >/dev/null 2>&1 &
 			fi
 			;;
 		*flatpak*mpv*)
 			nohup flatpak run io.mpv.Mpv --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
-				$skip_flag $player_extra_flags --force-media-title="$anime_title Episode $ep_no" \
+				$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" \
 				"$video_link" >/dev/null 2>&1 &
 			;;
 		*iina*)
@@ -1014,36 +1160,36 @@ play_episode() {
 			if pgrep -f "IINA" >/dev/null 2>&1; then
 				nohup $player_function --mpv-referrer="$refr" ${_sub_iina:+--mpv-sub-files="$_sub_iina"} \
 					$skip_flag $player_extra_flags --no-stdin \
-					--mpv-force-media-title="$anime_title Episode $ep_no" "$video_link" >/dev/null 2>&1 &
+					--mpv-force-media-title="$anime_title $ep_label" "$video_link" >/dev/null 2>&1 &
 			else
 				nohup $player_function --mpv-referrer="$refr" ${_sub_iina:+--mpv-sub-files="$_sub_iina"} \
 					$skip_flag $player_extra_flags --no-stdin --keep-running \
-					--mpv-force-media-title="$anime_title Episode $ep_no" "$video_link" >/dev/null 2>&1 &
+					--mpv-force-media-title="$anime_title $ep_label" "$video_link" >/dev/null 2>&1 &
 			fi
 			;;
 		*yncpla*)
 			nohup $player_function $player_extra_flags "$video_link" -- $skip_flag --referrer="$refr" \
 				${sub_link:+--sub-file="$sub_link"} \
-				--force-media-title="$anime_title Episode $ep_no" >/dev/null 2>&1 &
+				--force-media-title="$anime_title $ep_label" >/dev/null 2>&1 &
 			;;
 		*mpv*)
 			if [ "$no_detach" = 1 ]; then
 				$player_function --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
-					$skip_flag $player_extra_flags --force-media-title="$anime_title Episode $ep_no" "$video_link"
+					$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" "$video_link"
 			else
 				nohup $player_function --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
-					$skip_flag $player_extra_flags --force-media-title="$anime_title Episode $ep_no" \
+					$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" \
 					"$video_link" >/dev/null 2>&1 &
 			fi
 			;;
 		*vlc*)
 			if [ "$no_detach" = 1 ]; then
 				$player_function --http-referrer="$refr" $player_extra_flags --play-and-exit \
-					--meta-title="$anime_title Episode $ep_no" "$video_link" \
+					--meta-title="$anime_title $ep_label" "$video_link" \
 					:input-slave="${sub_link:-}"
 			else
 				nohup $player_function --http-referrer="$refr" $player_extra_flags --play-and-exit \
-					--meta-title="$anime_title Episode $ep_no" "$video_link" \
+					--meta-title="$anime_title $ep_label" "$video_link" \
 					:input-slave="${sub_link:-}" >/dev/null 2>&1 &
 			fi
 			;;
@@ -1090,7 +1236,7 @@ play() {
 	if [ -n "$_range" ]; then
 		for _i in $_range; do
 			ep_no=$_i
-			info "Playing episode $ep_no..."
+			info "Playing $(ep_display "$ep_no")..."
 			resolve_episode "$anime_id" "$ep_no" || die "No sources found for episode $ep_no"
 			play_episode
 		done
@@ -1156,8 +1302,15 @@ load_episode_maps() {
 		mode=sub
 		episode_maps=$(provider_episode_maps "$anime_id")
 	fi
+	# the site keeps each season as its own entry, so pull them together and
+	# keep every episode of every season in one list
+	season_total=1
+	merge_season_maps || true
 	ep_list=$(printf '%s\n' "$episode_maps" | cut -f 1)
-	[ -n "$ep_list" ]
+	[ -n "$ep_list" ] || return 1
+	if [ "$season_total" -gt 1 ]; then
+		info "$season_total seasons, $(printf '%s\n' "$ep_list" | grep -c .) episodes"
+	fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1390,7 +1543,7 @@ else
 fi
 
 if [ -z "$ep_no" ]; then
-	ep_no=$(nth "Select episode" "" "$(printf '%s\n' "$episode_maps" | awk -F'\t' '{ printf "%s\tepisode %s\n", $1, $1 }')" | cut -f 1)
+	ep_no=$(nth "Select episode" "" "$(printf '%s\n' "$episode_maps" | awk -F'\t' -v multi="${season_total:-1}" '{ printf "%s\t%s\n", $1, (multi > 1 && $5 != "" ? $5 : "episode " $1) }')" | cut -f 1)
 	[ -z "$ep_no" ] && die "Invalid episode selection"
 fi
 
@@ -1401,7 +1554,7 @@ play "$ep_no"
 # ---------------------------------------------------------------------------
 
 while [ "$player_function" != download ] && [ "$player_function" != print ]; do
-	_cmd=$(nth "Playing episode $ep_no of $anime_title" "" \
+	_cmd=$(nth "Playing $ep_label of $anime_title" "" \
 		"$(printf 'next\tnext\nreplay\treplay\nprevious\tprevious\nselect\tselect\nquit\tquit')" | cut -f 1)
 	case "$_cmd" in
 		next) ep_no=$(printf '%s\n' "$ep_list" | sed -n "/^${ep_no}$/{n;p;}") ;;
@@ -1412,7 +1565,7 @@ while [ "$player_function" != download ] && [ "$player_function" != print ]; do
 			play_episode
 			continue
 			;;
-		select) ep_no=$(nth "Select episode" "" "$(printf '%s\n' "$episode_maps" | awk -F'\t' '{ printf "%s\tepisode %s\n", $1, $1 }')" | cut -f 1) ;;
+		select) ep_no=$(nth "Select episode" "" "$(printf '%s\n' "$episode_maps" | awk -F'\t' -v multi="${season_total:-1}" '{ printf "%s\t%s\n", $1, (multi > 1 && $5 != "" ? $5 : "episode " $1) }')" | cut -f 1) ;;
 		*) break ;;
 	esac
 	[ -z "$ep_no" ] && {
