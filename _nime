@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.0"
+version="1.8.1"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -924,7 +924,10 @@ resolve_episode() {
 	outro_end=0
 
 	info "Resolving $(ep_display "$2")..."
-	_page=$(http_get "$_embed" "$base_as") || return 1
+	# the player only answers to its own host as referer; the source pages are
+	# not accepted and quietly hand back an error page without a file id
+	_embed_ref=$(printf '%s' "$_embed" | sed -E 's|^(https?://[^/]+).*|\1|')
+	_page=$(http_get "$_embed" "$_embed_ref") || return 1
 	_file_id=$(printf '%s' "$_page" | grep -oE 'data-id="[0-9]+"' | head -n 1 | grep -oE '[0-9]+')
 	if [ -z "$_file_id" ]; then
 		warn "Player page did not expose a file id"
@@ -1020,6 +1023,45 @@ resolve_episode() {
 	fi
 	[ -z "$video_link" ] && return 1
 	info "Stream ready"
+}
+
+# resolve_episode_any <ep>: resolve_episode, but when the source it picked has no
+# stream for that episode the same show is looked up on the other one, so a title
+# that only one of them really carries still plays
+resolve_episode_any() {
+	_ep=$1
+	resolve_episode "$anime_id" "$_ep" && return 0
+
+	_saved_provider=$provider
+	_saved_id=$anime_id
+	_saved_maps=$episode_maps
+
+	for _p in animesuge anichan; do
+		[ "$_p" = "$_saved_provider" ] && continue
+		_row=$(search_all_sources "$(season_query "$(season_base "$anime_title")")" |
+			awk -F"$TAB" -v p="$_p" '$3 == p' | head -n 1)
+		[ -z "$_row" ] && continue
+		_t=$(printf '%s' "$_row" | cut -f 4)
+		titles_match "$anime_title" "$_t" || continue
+		[ "$(season_no "$anime_title")" = "$(season_no "$_t")" ] || continue
+		_id=$(printf '%s' "$_row" | cut -f 1)
+		[ "$_p" = animesuge ] && _id=$(as_anime_id "$_id")
+		[ -z "$_id" ] && continue
+
+		provider=$_p
+		anime_id=$_id
+		episode_maps=$(provider_episode_maps "$_id")
+		if [ -n "$episode_maps" ]; then
+			info "No stream there, trying the other source..."
+			resolve_episode "$anime_id" "$_ep" && {
+				return 0
+			}
+		fi
+		provider=$_saved_provider
+		anime_id=$_saved_id
+		episode_maps=$_saved_maps
+	done
+	return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -1454,7 +1496,7 @@ play() {
 		for _i in $_range; do
 			ep_no=$_i
 			info "Playing $(ep_display "$ep_no")..."
-			resolve_episode "$anime_id" "$ep_no" || die "No sources found for episode $ep_no"
+			resolve_episode_any "$ep_no" || die "No sources found for episode $ep_no"
 			play_episode
 		done
 		return
@@ -1462,7 +1504,7 @@ play() {
 
 	printf '%s\n' "$ep_list" | grep -qx "$_spec" || die "Invalid episode!"
 	ep_no=$_spec
-	resolve_episode "$anime_id" "$ep_no" || die "No sources found for episode $ep_no!"
+	resolve_episode_any "$ep_no" || die "No sources found for episode $ep_no!"
 	play_episode
 }
 
