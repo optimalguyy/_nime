@@ -346,6 +346,10 @@ pick:
 
 On Android that is `/storage/emulated/0/Download/_nime downloads`.
 
+While an episode downloads you get one line that updates in place — a bar, the
+percentage, the speed and the time left — and if a download fails it says why
+instead of just stopping.
+
 Downloads are `.mp4` with the subtitles **muxed into the file** as a soft track,
 so they travel with the video: every normal player (mpv, VLC, QuickTime, IINA,
 the Android players, most TVs) lists the track under its subtitle menu and you

@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.1"
+version="1.8.2"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1197,6 +1197,24 @@ download_dir() {
 	printf '%s' "$_base"
 }
 
+# one updating line from a yt-dlp progress line: [#####     ]  42.3% 1.2MiB/s
+# it writes to stderr with a carriage return, so the rest of the output stays put
+draw_progress() {
+	_pct=$(printf '%s' "$1" | sed -nE 's/.*\[download\][[:space:]]+([0-9.]+)%.*/\1/p' | head -n 1)
+	[ -z "$_pct" ] && return 1
+	_speed=$(printf '%s' "$1" | sed -nE 's#.*[[:space:]]([0-9.]+[KMG]?iB/s).*#\1#p' | head -n 1)
+	_eta=$(printf '%s' "$1" | sed -nE 's#.*ETA[[:space:]]+([0-9:]+).*#ETA \1#p' | head -n 1)
+	_done=$(awk -v p="$_pct" 'BEGIN { d = int(p / 5); print (d > 20 ? 20 : d) }')
+	_bar=$(awk -v d="$_done" 'BEGIN {
+		s = ""
+		for (i = 0; i < 20; i++) s = s (i < d ? "#" : "-")
+		printf "%s", s
+	}')
+	awk -v b="$_bar" -v p="$_pct" -v s="$_speed" -v e="$_eta" 'BEGIN {
+		printf "\r\033[2K  %s %6s%%  %-10s %s", b, p, s, e
+	}' >&2
+}
+
 # downloads are written as mp4 with the subtitles muxed in as a soft
 # (selectable) track, which mpv, vlc, quicktime and every normal player lists
 # in its subtitle menu.
@@ -1223,8 +1241,19 @@ download_video() {
 	info "Downloading $anime_title episode $ep_no..."
 	_ok=0
 	if command -v yt-dlp >/dev/null 2>&1; then
-		yt-dlp --no-progress --referer "$refr" -f 'bv*+ba/b' --merge-output-format mp4 \
-			-o "$_tmpd/raw.%(ext)s" "$video_link" >/dev/null 2>&1 && _ok=1
+		# the progress lines become one bar, everything else goes to a log so a
+		# failure can say what actually went wrong
+		(
+			yt-dlp --newline --progress --referer "$refr" -f 'bv*+ba/b' --merge-output-format mp4 \
+				-o "$_tmpd/raw.%(ext)s" "$video_link" 2>&1
+			printf 'rc=%s\n' "$?" >"$_tmpd/rc"
+		) | while IFS= read -r _line; do
+			printf '%s\n' "$_line" >>"$_tmpd/ytdl.log"
+			draw_progress "$_line" || :
+		done
+		printf '\r\033[2K' >&2
+		_rc=$(sed -n 's/^rc=//p' "$_tmpd/rc" 2>/dev/null)
+		[ "$_rc" = 0 ] && _ok=1
 	elif command -v ffmpeg >/dev/null 2>&1; then
 		ffmpeg -loglevel error -referer "$refr" -i "$video_link" \
 			-c copy -bsf:a aac_adtstoasc "$_tmpd/raw.mp4" && _ok=1
@@ -1236,6 +1265,10 @@ download_video() {
 
 	if [ "$_ok" != 1 ]; then
 		warn "Download failed"
+		# say why, instead of leaving nothing but "failed"
+		_why=$(grep -E '^ERROR|error:|HTTP Error|Unsupported|Unable' "$_tmpd/ytdl.log" 2>/dev/null | tail -n 2)
+		[ -z "$_why" ] && _why=$(tail -n 3 "$_tmpd/ytdl.log" 2>/dev/null)
+		[ -n "$_why" ] && printf '%s\n' "$_why" >&2
 		rm -rf "$_tmpd"
 		return 1
 	fi
