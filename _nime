@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.6.3"
+version="1.6.4"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -365,6 +365,11 @@ ac_search() {
 	[ -z "$_page" ] && return 1
 	printf '%s' "$_page" | tr '{' '\n' |
 		while IFS= read -r _rec || [ -n "$_rec" ]; do
+			# music videos and things that have not aired are not watchable, and
+			# the search hands them over all the same
+			case "$_rec" in
+				*'"format":"MUSIC"'* | *'"status":"NOT_YET_RELEASED"'*) continue ;;
+			esac
 			_id=$(printf '%s' "$_rec" | sed -nE 's|^"id":([0-9]+).*|\1|p')
 			[ -z "$_id" ] && continue
 			_name=$(printf '%s' "$_rec" | unescape | sed -nE 's|.*"title":"([^"]*)".*|\1|p')
@@ -689,6 +694,23 @@ find_dub_source() {
 # provider dispatch
 # ---------------------------------------------------------------------------
 
+# only the rows whose title carries a word of the query, so a search does not
+# come back with every entry the source happens to associate with it
+relevant_rows() {
+	awk -F'\t' -v q="$1" '
+		BEGIN {
+			n = split(tolower(q), w, "[-+ ,]")
+			k = 0
+			for (i = 1; i <= n; i++) if (length(w[i]) >= 3) words[++k] = w[i]
+		}
+		NF >= 3 {
+			t = tolower($2)
+			hit = (k == 0)
+			for (i = 1; i <= k && !hit; i++) if (index(t, words[i])) hit = 1
+			if (hit) print
+		}'
+}
+
 # both sources are asked at once and the answers become one list, so a title
 # shows up once and nothing has to be chosen up front. each row keeps the id it
 # needs for its own source in field 1 and names that source in field 3
@@ -701,7 +723,12 @@ search_all_sources() {
 		[ -n "$_id" ] && printf '%s\t%s\tanichan\n' "$_id" "$_nm"
 	done >"${_tmp}.b" ) &
 	wait
-	cat "${_tmp}.a" "${_tmp}.b" 2>/dev/null |
+	_all=$(cat "${_tmp}.a" "${_tmp}.b" 2>/dev/null)
+	_pruned=$(printf '%s\n' "$_all" | relevant_rows "$1")
+	# a short query like an acronym matches no title at all, so keep the raw
+	# answers rather than showing nothing
+	[ -z "$_pruned" ] && _pruned=$_all
+	printf '%s\n' "$_pruned" |
 		awk -F'\t' 'NF >= 3 {
 			key = tolower($2)
 			gsub(/[^a-z0-9]/, "", key)
