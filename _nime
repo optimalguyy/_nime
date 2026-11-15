@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.0.0"
+version="1.0.1"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -962,8 +962,7 @@ play() {
 
 update_script() {
 	case "$update_base" in
-		*\.git* | "") die "Set repo_user at the top of this script (or _NIME_USER=you) before using -U" ;;
-		*CHANGE_ME*) die "Set repo_user at the top of this script (or _NIME_USER=you) before using -U" ;;
+		'' | *CHANGE_ME*) die "Set repo_user at the top of this script (or _NIME_USER=you) before using -U" ;;
 	esac
 	info "[$repo_branch] Checking for updates..."
 	_latest=$(curl -sSL --fail-with-body --max-time 25 "$update_base/_nime") ||
