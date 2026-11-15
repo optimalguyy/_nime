@@ -4,8 +4,10 @@
 #   sh install.sh                      from a clone
 #   curl -fsSL <raw url> | sh          without one
 #
-# It only copies files around. Nothing is installed system wide, nothing asks
-# for a password, and nothing starts on its own later.
+# It copies files into your home directory and installs whatever _nime needs
+# that is missing, through your own package manager. Nothing starts on its own
+# later. Set _NIME_NO_DEPS=1 to skip the dependency step, _NIME_DEST to change
+# where the scripts go.
 
 set -e
 
@@ -63,11 +65,91 @@ case ":${PATH}:" in
 		;;
 esac
 
-# say what is missing instead of letting it surprise anyone later
-if [ -x "$dest/_nime" ]; then
-	_missing=$("$dest/_nime" --check-deps 2>/dev/null | sed -n 's/^  absent   /  missing: /p')
-	if [ -n "$_missing" ]; then
-		printf 'optional programs not found:\n%s\n' "$_missing"
+# ---------------------------------------------------------------------------
+# dependencies: a picker, a player, and the two programs downloads are made with
+# ---------------------------------------------------------------------------
+want="fzf mpv yt-dlp ffmpeg python3 openssl"
+
+missing=""
+for _d in $want; do
+	command -v "$_d" >/dev/null 2>&1 || missing="$missing $_d"
+done
+
+if [ -z "$missing" ]; then
+	printf 'everything _nime uses is already installed\n'
+elif [ "${_NIME_NO_DEPS:-0}" = 1 ]; then
+	printf 'skipped installing:%s\n' "$missing"
+else
+	# the names are the same package names everywhere except on a Mac, where
+	# brew and the menu program live in their own formulas
+	if [ -n "${TERMUX_VERSION:-}" ] && command -v pkg >/dev/null 2>&1; then
+		pm="install"; pm_quiet="-y"
+	elif command -v pacman >/dev/null 2>&1; then
+		pm="pacman"; pm_quiet="--needed --noconfirm"
+	elif command -v apt-get >/dev/null 2>&1; then
+		pm="apt-get"; pm_quiet="install -y"
+	elif command -v dnf >/dev/null 2>&1; then
+		pm="dnf"; pm_quiet="install -y"
+	elif command -v zypper >/dev/null 2>&1; then
+		pm="zypper"; pm_quiet="install -y"
+	elif command -v apk >/dev/null 2>&1; then
+		pm="apk"; pm_quiet="add"
+	elif command -v brew >/dev/null 2>&1; then
+		pm="brew"; pm_quiet="install"
+	else
+		pm=""
+	fi
+
+	if [ -z "$pm" ]; then
+		printf '\nNo package manager found. Install these yourself:%s\n' "$missing"
+	elif [ "$pm" = brew ]; then
+		printf 'installing:%s (brew)\n' "$missing"
+		for _p in fzf mpv yt-dlp ffmpeg python openssl@3; do
+			case "$missing " in
+				*" ${_p%@*} "*) brew install "$_p" || true ;;
+			esac
+		done
+		printf 'done\n'
+	else
+		pkgs="$missing"
+
+		if [ "$(id -u)" = 0 ]; then
+			privileged=""
+		elif command -v sudo >/dev/null 2>&1; then
+			privileged="sudo"
+		else
+			privileged=""
+		fi
+
+		# `curl | sh` hands the script to stdin, so sudo has nowhere to ask for
+		# the password unless it is pointed at the terminal
+		ask=0
+		if [ "$privileged" = sudo ] && ! sudo -n true 2>/dev/null; then
+			if ( : </dev/tty ) 2>/dev/null; then
+				ask=1
+			elif [ -z "$privileged" ]; then
+				ask=-1
+			else
+				ask=-1
+			fi
+		fi
+
+		if [ "$ask" = -1 ]; then
+			printf '\nInstalling these needs a password, run:\n\n  sudo %s %s%s\n' \
+				"$pm" "$pm_quiet" "$pkgs"
+		elif [ -z "$privileged" ] && [ "$(id -u)" != 0 ]; then
+			printf '\nNo sudo here, install these yourself:\n\n  %s %s%s\n' "$pm" "$pm_quiet" "$pkgs"
+		else
+			printf 'installing:%s (%s)\n' "$pkgs" "$pm"
+			[ "$pm" = apt-get ] && { $privileged apt-get update -qq || true; }
+			if [ "$ask" = 1 ]; then
+				$privileged "$pm" $pm_quiet $pkgs </dev/tty
+			else
+				$privileged "$pm" $pm_quiet $pkgs
+			fi && printf 'done\n' ||
+				printf '\nCould not install:%s\nInstall them with:\n\n  sudo %s %s%s\n' \
+					"$pkgs" "$pm" "$pm_quiet" "$pkgs"
+		fi
 	fi
 fi
 

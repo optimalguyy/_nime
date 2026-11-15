@@ -46,8 +46,11 @@ macOS and Termux, so a fresh system already has them.
 | `termux-am` | `am` intents on Android |
 
 **No player?** `_nime` still resolves the episode and prints the stream URL,
-the subtitle URL and the required referer, so you can paste them anywhere. It
-never installs anything for you.
+the subtitle URL and the required referer, so you can paste them anywhere.
+
+The script itself never touches your system. The one-line installer below is the
+one thing that does, and only to install the programs above that you are
+missing.
 
 ## Install
 
@@ -57,9 +60,14 @@ One line, on any system:
 curl -fsSL https://raw.githubusercontent.com/optimalguyy/_nime/master/install.sh | sh
 ```
 
-That copies `_nime` and `_nime-dl` into `~/.local/bin`, adds the folder to your
-shell's `PATH` if it is not there yet, installs the man page, and prints
-anything still missing. Run it again later to update, or use `_nime -U`.
+That copies `_nime` and `_nime-dl` into `~/.local/bin`, tells you how to put
+that folder on your `PATH` if it is not there yet, installs the man page, and
+then installs whatever `_nime` needs that is missing — `fzf`, `mpv`, `yt-dlp`,
+`ffmpeg`, `python3`, `openssl` — through your own package manager (`pacman`,
+`apt`, `dnf`, `zypper`, `apk`, `pkg` on Termux, `brew` on a Mac), asking for your
+password only if it has to.
+
+Run it again later to update, or use `_nime -U`.
 
 ### Arch, CachyOS, Manjaro, EndeavourOS
 
