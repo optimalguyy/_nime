@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.6.2"
+version="1.6.3"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -908,7 +908,28 @@ resolve_episode() {
 		sed "\|>https*://|!s|>|>${_m3u8%/*}/|" | sort -gr -s)
 	[ -z "$links" ] && links="direct >$_m3u8"
 
-	select_quality "$quality"
+	stream_flags=""
+	if printf '%s' "$_playlist" | grep -q 'EXT-X-MEDIA:TYPE=AUDIO'; then
+		# the variants hold picture only and the master names the audio
+		# renditions beside them, so playing a variant alone is silent: give the
+		# player the master and cap the bandwidth when a quality was asked for
+		video_link="$_m3u8"
+		case "$quality" in
+			worst) _bw=$(printf '%s\n' "$_playlist" | sed -nE 's/.*BANDWIDTH=([0-9]+).*/\1/p' | sort -n | head -n 1) ;;
+			best | '') _bw="" ;;
+			*)
+				_q=${quality%p}
+				_bw=$(printf '%s\n' "$_playlist" | grep -F "NAME=\"${_q}p\"" |
+					sed -nE 's/.*BANDWIDTH=([0-9]+).*/\1/p' | head -n 1)
+				[ -z "$_bw" ] && _bw=$(printf '%s\n' "$_playlist" |
+					grep -E "RESOLUTION=[0-9]+x${_q}([^0-9]|$)" |
+					sed -nE 's/.*BANDWIDTH=([0-9]+).*/\1/p' | head -n 1)
+				;;
+		esac
+		[ -n "$_bw" ] && stream_flags="--hls-bitrate=$_bw"
+	else
+		select_quality "$quality"
+	fi
 	[ -z "$video_link" ] && return 1
 	info "Stream ready"
 }
@@ -1240,7 +1261,7 @@ play_episode() {
 			;;
 		*flatpak*mpv*)
 			nohup flatpak run io.mpv.Mpv --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
-				$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" \
+				$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" \
 				"$video_link" >/dev/null 2>&1 &
 			;;
 		*iina*)
@@ -1263,10 +1284,10 @@ play_episode() {
 		*mpv*)
 			if [ "$no_detach" = 1 ]; then
 				$player_function --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
-					$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" "$video_link"
+					$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" "$video_link"
 			else
 				nohup $player_function --input-ipc-server="$player_sock" --referrer="$refr" ${sub_link:+--sub-file="$sub_link"} \
-					$skip_flag $player_extra_flags --force-media-title="$anime_title $ep_label" \
+					$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" \
 					"$video_link" >/dev/null 2>&1 &
 			fi
 			;;
@@ -1437,6 +1458,7 @@ source="search"
 player_function=""
 replay=""
 skip_flag=""
+stream_flags=""
 do_check_deps=0
 
 while [ $# -gt 0 ]; do
