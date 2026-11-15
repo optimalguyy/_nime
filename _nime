@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.6.1"
+version="1.6.2"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -626,7 +626,9 @@ merge_season_maps() {
 	rm -f "$_tmp" "${_tmp}".*
 	[ "$_off" -gt 0 ] || return 1
 	season_total=$_used
-	episode_maps=$_blocks
+	# command substitution drops the newline the last block ended with, so the
+	# menus do not show a blank row after the final episode
+	episode_maps=$(printf '%s' "$_blocks")
 	[ "$_used" -gt 1 ]
 }
 
