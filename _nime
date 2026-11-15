@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.6.0"
+version="1.6.1"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -262,10 +262,10 @@ nth() {
 		# hands it back on exit, so the menu feels like its own window
 		if [ -n "$_multi" ]; then
 			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
-				--with-nth=2.. -m $menu_extra_flags --prompt "$_prompt > "
+				--with-nth=2 -m $menu_extra_flags --prompt "$_prompt > "
 		else
 			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
-				--with-nth=2.. $menu_extra_flags --prompt "$_prompt > "
+				--with-nth=2 $menu_extra_flags --prompt "$_prompt > "
 		fi
 		return
 	fi
@@ -302,7 +302,7 @@ as_search() {
 	[ -z "$_page" ] && return 1
 	printf '%s' "$_page" | unescape | tr '\n' ' ' |
 		sed 's|<a class="item" |\n<a class="item" |g' |
-		while IFS= read -r _rec; do
+		while IFS= read -r _rec || [ -n "$_rec" ]; do
 			_slug=$(printf '%s' "$_rec" | sed -nE 's|.*href="[^"]*/anime/([^"]*)".*|\1|p' | head -n 1)
 			_name=$(printf '%s' "$_rec" | sed -nE 's|.*<div class="name"[^>]*>([^<]*)</div>.*|\1|p')
 			[ -z "$_slug" ] && continue
@@ -321,7 +321,7 @@ as_episode_maps() {
 	[ -z "$_raw" ] && return 1
 	printf '%s' "$_raw" | unescape | tr '\n' ' ' |
 		sed 's|<a href="#" |\n<a href="#" |g' |
-		while IFS= read -r _rec; do
+		while IFS= read -r _rec || [ -n "$_rec" ]; do
 			_ep=$(printf '%s' "$_rec" | sed -nE 's|.*data-slug="([^"]*)".*|\1|p')
 			_ids=$(printf '%s' "$_rec" | sed -nE 's|.*data-ids="([^"]*)".*|\1|p')
 			_sub=$(printf '%s' "$_rec" | sed -nE 's|.*data-sub="([01])".*|\1|p')
@@ -341,7 +341,7 @@ as_servers() {
 	[ -z "$_raw" ] && return 1
 	printf '%s' "$_raw" | unescape | tr '\n' ' ' |
 		sed 's|<div class="server"|\n<div class="server"|g' |
-		while IFS= read -r _rec; do
+		while IFS= read -r _rec || [ -n "$_rec" ]; do
 			_link=$(printf '%s' "$_rec" | sed -nE 's|.*data-link-id="([^"]*)".*|\1|p')
 			_name=$(printf '%s' "$_rec" | sed -nE 's|.*<span>([^<]*)</span>.*|\1|p')
 			[ -z "$_link" ] && continue
@@ -364,7 +364,7 @@ ac_search() {
 	_page=$(http_get "$base_ac/api/suggest?q=$1") || return 1
 	[ -z "$_page" ] && return 1
 	printf '%s' "$_page" | tr '{' '\n' |
-		while IFS= read -r _rec; do
+		while IFS= read -r _rec || [ -n "$_rec" ]; do
 			_id=$(printf '%s' "$_rec" | sed -nE 's|^"id":([0-9]+).*|\1|p')
 			[ -z "$_id" ] && continue
 			_name=$(printf '%s' "$_rec" | unescape | sed -nE 's|.*"title":"([^"]*)".*|\1|p')
@@ -649,7 +649,10 @@ find_dub_source() {
 			animesuge)
 				_line=$(as_search "$_q" | head -n 1)
 				[ -z "$_line" ] && continue
-				titles_match "$anime_title" "$(printf '%s' "$_line" | cut -f 2)" || continue
+				_ctitle=$(printf '%s' "$_line" | cut -f 2)
+				titles_match "$anime_title" "$_ctitle" || continue
+				# never jump to another season of the same series
+				[ "$(season_no "$anime_title")" = "$(season_no "$_ctitle")" ] || continue
 				info "No dub here, looking for one..."
 				if as_has_dub "$(printf '%s' "$_line" | cut -f 1)"; then
 					_id=$(as_anime_id "$(printf '%s' "$_line" | cut -f 1)")
@@ -663,7 +666,9 @@ find_dub_source() {
 			anichan)
 				_line=$(ac_search "$_q" | head -n 1)
 				[ -z "$_line" ] && continue
-				titles_match "$anime_title" "$(printf '%s' "$_line" | cut -f 2)" || continue
+				_ctitle=$(printf '%s' "$_line" | cut -f 2)
+				titles_match "$anime_title" "$_ctitle" || continue
+				[ "$(season_no "$anime_title")" = "$(season_no "$_ctitle")" ] || continue
 				_id=$(printf '%s' "$_line" | cut -f 1)
 				info "No dub here, looking for one..."
 				if ac_has_dub "$_id"; then
