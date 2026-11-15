@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.0.2"
+version="1.1.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -67,7 +67,8 @@ help_info() {
 	  -v, --vlc         Use VLC to play the video
 	  -V, --version     Show the version of the script
 	  -h, --help        Show this help message and exit
-	  --dub             Play the dubbed version
+	  --dub             Play the dubbed version (default)
+	  --sub             Play the subbed version
 	  --sub-lang <lang> Subtitles to use, a code (eng, ger, spa) or a name
 	                    (german). With --download, "all" embeds every track
 	  --list-subs       List the subtitle tracks of an episode and exit
@@ -228,12 +229,14 @@ nth() {
 	_list=$(cat)
 
 	if [ "$menu_program" = fzf ]; then
+		# no --height: fzf takes over the whole terminal on its own screen and
+		# hands it back on exit, so the menu feels like its own window
 		if [ -n "$_multi" ]; then
-			printf '%s\n' "$_list" | fzf --reverse --height=50% --delimiter="$TAB" \
-				--with-nth=2.. -m $menu_extra_flags --prompt "$_prompt: " | cut -f 1
+			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
+				--with-nth=2.. -m $menu_extra_flags --prompt "$_prompt > " | cut -f 1
 		else
-			printf '%s\n' "$_list" | fzf --reverse --height=50% --delimiter="$TAB" \
-				--with-nth=2.. $menu_extra_flags --prompt "$_prompt: " | cut -f 1
+			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
+				--with-nth=2.. $menu_extra_flags --prompt "$_prompt > " | cut -f 1
 		fi
 		return
 	fi
@@ -996,12 +999,25 @@ update_script() {
 	exit 0
 }
 
+# load the episode list for $anime_id into $episode_maps / $ep_list,
+# stepping down to subs when a show simply has no dub
+load_episode_maps() {
+	episode_maps=$(provider_episode_maps "$anime_id")
+	if [ -z "$episode_maps" ] && [ "$mode" = dub ]; then
+		warn "No dubbed episodes for that one, using the subbed version"
+		mode=sub
+		episode_maps=$(provider_episode_maps "$anime_id")
+	fi
+	ep_list=$(printf '%s\n' "$episode_maps" | cut -f 1)
+	[ -n "$ep_list" ]
+}
+
 # ---------------------------------------------------------------------------
 # main
 # ---------------------------------------------------------------------------
 
 provider="${_NIME_SOURCE:-animesuge}"
-mode="${_NIME_MODE:-sub}"
+mode="${_NIME_MODE:-dub}"
 quality="${_NIME_QUALITY:-best}"
 menu_program="${_NIME_MENU:-fzf}"
 menu_extra_flags="${_NIME_MENU_FLAGS:-}"
@@ -1052,6 +1068,8 @@ while [ $# -gt 0 ]; do
 			shift
 			;;
 		-v | --vlc) player_function=vlc ;;
+		--dub) mode=dub ;;
+		--sub) mode=sub ;;
 		--skip) skip_intro=1 ;;
 		--sub-lang)
 			[ $# -lt 2 ] && die "missing argument!"
@@ -1168,9 +1186,7 @@ if [ "$source" = history ]; then
 	ep_no=$(printf '%s' "$_sel_title" | sed -nE 's|.* - episode ([^ ]*)$|\1|p')
 	[ -z "$provider" ] && die "History entry is broken, delete it with -D"
 
-	episode_maps=$(provider_episode_maps "$anime_id")
-	ep_list=$(printf '%s\n' "$episode_maps" | cut -f 1)
-	[ -z "$ep_list" ] && die "Could not load episodes for that entry"
+	load_episode_maps || die "Could not load episodes for that entry"
 else
 	[ -z "$query" ] && die "No query given (try _nime -h)"
 	info "Searching $provider for '$query'..."
@@ -1194,9 +1210,7 @@ else
 		anime_id=$_resolved
 	fi
 
-	episode_maps=$(provider_episode_maps "$anime_id") || die "Could not load the episode list"
-	ep_list=$(printf '%s\n' "$episode_maps" | cut -f 1)
-	[ -z "$ep_list" ] && die "No episodes found"
+	load_episode_maps || die "No episodes found"
 fi
 
 if [ -z "$ep_no" ]; then
