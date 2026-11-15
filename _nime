@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.6.6"
+version="1.7.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -89,8 +89,10 @@ help_info() {
 	  -arasub           Subtitles in that language (short for --sub-lang)
 	  -allsub           Every subtitle track, when downloading
 	  --sub             Play the subbed version
+	  -subs, --subs     Show subtitles (off by default)
 	  --sub-lang <lang> Subtitles to use, a code (eng, ger, spa) or a name
-	                    (german). With --download, "all" embeds every track
+	                    (german), which also turns them on. With --download,
+	                    "all" embeds every track
 	  --list-subs       List the subtitle tracks of an episode and exit
 	  --skip            Skip intros and outros (mpv only)
 	  --syncplay        Watch together with friends through Syncplay
@@ -883,6 +885,8 @@ pick_sub() {
 	sub_code=""
 	sub_label=""
 	[ -z "$sub_tracks" ] && return 0
+	# subtitles stay off until they are asked for
+	[ "$subs_on" = 1 ] || return 0
 
 	_sel=""
 	case "$sub_lang" in
@@ -1197,7 +1201,7 @@ download_video() {
 
 	# which tracks to embed: everything with --sub-lang all, otherwise the pick
 	_sel_tracks=""
-	if [ -n "$sub_tracks" ]; then
+	if [ "$subs_on" = 1 ] && [ -n "$sub_tracks" ]; then
 		case "$sub_lang" in
 			all | ALL | All) _sel_tracks=$sub_tracks ;;
 			*)
@@ -1534,6 +1538,8 @@ player_extra_flags="${_NIME_PLAYER_FLAGS:-}"
 no_detach="${_NIME_NO_DETACH:-0}"
 skip_intro="${_NIME_SKIP:-0}"
 sub_lang="${_NIME_SUB_LANG:-}"
+subs_on=0
+[ -n "$sub_lang" ] && subs_on=1
 dub_lang="${_NIME_DUB_LANG:-eng}"
 sub_tracks=""
 sub_code=""
@@ -1588,9 +1594,11 @@ while [ $# -gt 0 ]; do
 			mode=dub
 			;;
 		--skip) skip_intro=1 ;;
+		-subs | --subs) subs_on=1 ;;
 		--sub-lang)
 			[ $# -lt 2 ] && die "missing argument!"
 			sub_lang=$2
+			subs_on=1
 			shift
 			;;
 		-engsub | --engsub | -gersub | --gersub | -fresub | --fresub | -spasub | --spasub | \
@@ -1600,6 +1608,7 @@ while [ $# -gt 0 ]; do
 			_sub_flag="${1#--}"
 			sub_lang="${_sub_flag#-}"
 			sub_lang="${sub_lang%sub}"
+			subs_on=1
 			;;
 		--list-subs) list_subs=1 ;;
 		--no-detach) no_detach=1 ;;

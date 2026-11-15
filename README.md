@@ -251,9 +251,10 @@ _nime -d -e 1-3 "<title>"     # three files in ~/Downloads/_nime downloads
 
 ### Subtitle languages
 
-A source usually offers a dozen tracks: Arabic, English, French, German,
-Italian, Portuguese, Russian, Spanish, sometimes regional variants. Look at what
-an episode has:
+Subtitles are off unless you ask for them — an episode plays clean, and `-subs`
+turns them on. A source usually offers a dozen tracks: Arabic, English, French,
+German, Italian, Portuguese, Russian, Spanish, sometimes regional variants. Look
+at what an episode has:
 
 ```sh
 _nime --list-subs -e 1 "<title>"
@@ -268,7 +269,8 @@ Subtitles for episode 1:
   ...
 ```
 
-Then pick one, either by language code or by name:
+Pick one with `-subs` for the default track, or by language, which also turns
+them on:
 
 ```sh
 _nime-dl "<title>" -e 1 -gersub   # German subtitles only
@@ -305,6 +307,7 @@ failing.
 | `-gerdub` `-spadub` `-fredub` `-itadub` `-pordub` `-rusdub` `-aradub` | that language's dub, when a source has one |
 | `-engsub` `-gersub` `-spasub` `-fresub` `-itasub` `-porsub` `-rusub` `-arasub` | subtitles in that language, short for `--sub-lang` |
 | `-allsub` | every subtitle track, short for `--sub-lang all` |
+| `-subs, --subs` | show subtitles; off unless a subtitle flag is given |
 | `--sub` | subtitled instead of dubbed |
 | `--skip` | skip intros and outros (mpv) |
 | `--sub-lang <lang>` | subtitle language, as a code (`eng`, `ger`, `spa`) or a name (`german`); `all` embeds every track when downloading |

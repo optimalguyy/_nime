@@ -1,4 +1,4 @@
-.TH _NIME 1 "2026-11" "_nime 1.6.6" "User Commands"
+.TH _NIME 1 "2026-11" "_nime 1.7.0" "User Commands"
 .SH NAME
 _nime \- browse and watch anime from the terminal
 .SH SYNOPSIS
@@ -80,10 +80,14 @@ Subtitles in that language, short for \fB\-\-sub\-lang\fR.
 .BR \-allsub
 Every subtitle track, short for \fB\-\-sub\-lang all\fR.
 .TP
+.BR \-subs ", " \-\-subs
+Show subtitles. They stay off otherwise, and the video plays clean.
+.TP
 .BR \-\-sub\-lang " \fIlang\fR"
 Subtitle track to use, as a language code (\fIeng\fR, \fIger\fR, \fIspa\fR) or
-as a name (\fIgerman\fR). With \fB\-\-download\fR, \fIall\fR embeds every
-track the source offers. Without it the track the source marks default is used.
+as a name (\fIgerman\fR), which also turns subtitles on. With \fB\-\-download\fR,
+\fIall\fR embeds every track the source offers. Without it the track the source
+marks default is used.
 .TP
 .B \-\-list\-subs
 Print the subtitle tracks available for the selected episode, with language
