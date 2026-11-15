@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.3.1"
+version="1.3.2"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -28,16 +28,30 @@ opt_deps="fzf mpv vlc yt-dlp ffmpeg syncplay"
 # output helpers
 # ---------------------------------------------------------------------------
 
+# how many status lines are on the screen, so they can be taken back off it
+status_lines=0
+
+# erase the status lines printed so far, leaving the terminal as it was
+clear_status() {
+	[ "${status_lines:-0}" -gt 0 ] 2>/dev/null || return 0
+	printf '\33[%dA\33[0J' "$status_lines" >&2
+	status_lines=0
+}
+
 die() {
-	printf '\33[2K\r\033[1;31m%s\033[0m\n' "$*" >&2
+	printf '\33[2K\r' >&2
+	clear_status
+	printf '\33[1;31m%s\033[0m\n' "$*" >&2
 	exit 1
 }
 
 info() {
+	status_lines=$((status_lines + 1))
 	printf '\33[2K\r\033[1;34m%s\033[0m\n' "$*" >&2
 }
 
 warn() {
+	status_lines=$((status_lines + 1))
 	printf '\33[2K\r\033[1;33m%s\033[0m\n' "$*" >&2
 }
 
@@ -117,9 +131,19 @@ help_info() {
 }
 
 [ "${_NIME_COLOR:-1}" = 0 ] && {
-	die() { printf '%s\n' "$*" >&2; exit 1; }
-	info() { printf '%s\n' "$*" >&2; }
-	warn() { printf '%s\n' "$*" >&2; }
+	die() {
+		clear_status
+		printf '%s\n' "$*" >&2
+		exit 1
+	}
+	info() {
+		status_lines=$((status_lines + 1))
+		printf '%s\n' "$*" >&2
+	}
+	warn() {
+		status_lines=$((status_lines + 1))
+		printf '%s\n' "$*" >&2
+	}
 }
 
 dep_ch() {
@@ -1031,6 +1055,10 @@ play_episode() {
 			fi
 			;;
 	esac
+
+	# the player has the stream now, so the progress lines have done their job.
+	# iSH is the exception: its branch prints a link the user has to tap
+	[ "$player_function" = iSH ] || clear_status
 
 	replay="$video_link"
 	unset video_link

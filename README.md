@@ -129,6 +129,10 @@ Pick from the menu:
 _nime "<title>"
 ```
 
+The progress lines it prints while it works (`Searching...`, `Resolving episode
+2...`, `Stream ready`) are erased once the player has the stream, so your
+terminal is left as it was.
+
 Dubs are the default. If the source you picked has no dub for that show,
 `_nime` checks the other source and switches to whichever one has it:
 
