@@ -17,10 +17,8 @@ are identical, episodes are saved instead of played.
 .PP
 .B _nime
 searches an anime streaming site, lists the episodes, resolves the stream and
-hands it to a local player. It scrapes
-.BR animesuge.cz " and " anichan.to
-and talks to the MegaPlay player directly, including its encrypted stream
-payload, which it decrypts with
+hands it to a local player. It scrapes the site, talks to its player directly,
+including the encrypted stream payload, which it decrypts with
 .BR openssl (1).
 .PP
 When no player is available it prints the stream url, the subtitle url and the
@@ -28,7 +26,7 @@ required referer instead of failing.
 .SH OPTIONS
 .TP
 .BR \-s ", " \-\-source " \fIname\fR"
-Source to use: \fIanimesuge\fR (default) or \fIanichan\fR.
+Which site to use: \fI1\fR (default) or \fI2\fR.
 .TP
 .BR \-c ", " \-\-continue
 Continue watching from history.
@@ -171,7 +169,7 @@ _nime \-q 1080 \-e 5 "<title>"
 .TP
 Watch the other source with intros skipped:
 .EX
-_nime \-\-skip \-s anichan "<title>"
+_nime \-\-skip \-s 2 "<title>"
 .EE
 .TP
 Continue from history:

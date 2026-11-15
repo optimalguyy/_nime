@@ -2,9 +2,8 @@
 
 `_nime` is a terminal client for watching anime. Search for a show, pick an
 episode from a list, and it resolves the stream and hands it to your player.
-It reads [animesuge.cz](https://animesuge.cz) and
-[anichan.to](https://anichan.to), talks to their player directly — including
-the encrypted stream payload — and runs as a single POSIX shell script with no
+It reads an anime streaming site, talks to its player directly — including the
+encrypted stream payload — and runs as a single POSIX shell script with no
 runtime, no build step and no installer.
 
 Everything happens in the terminal: you search, you pick an anime and an
@@ -137,8 +136,8 @@ Dubs are the default. If the source you picked has no dub for that show,
 `_nime` checks the other source and switches to whichever one has it:
 
 ```
-No dub here, checking anichan...
-Switched to anichan: <title, as the other site spells it> (dubbed)
+No dub here, looking for one...
+Found it dubbed: <title>
 ```
 
 The switch only happens when the title actually matches, so it never lands you
@@ -166,10 +165,10 @@ _nime -e 5 "<title>"
 _nime -e 1-3 "<title>"
 ```
 
-The other source:
+The other site:
 
 ```sh
-_nime -s anichan "<title>"
+_nime -s 2 "<title>"
 ```
 
 Skip openings and endings automatically:
@@ -257,7 +256,7 @@ failing.
 
 | flag | meaning |
 | --- | --- |
-| `-s, --source <name>` | `animesuge` (default) or `anichan` |
+| `-s, --source <n>` | which site to use: `1` (default) or `2` |
 | `-c, --continue` | continue from history |
 | `-d, --download` | download instead of playing |
 | `-D, --delete` | delete history |
@@ -284,7 +283,7 @@ failing.
 
 | variable | meaning |
 | --- | --- |
-| `_NIME_SOURCE` | default source |
+| `_NIME_SOURCE` | which site to use: `1` (default) or `2` |
 | `_NIME_MODE` | `dub` (default) or `sub` |
 | `_NIME_QUALITY` | default quality |
 | `_NIME_PLAYER` | player command to use |
