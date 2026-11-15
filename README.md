@@ -326,8 +326,17 @@ _nime -d -e 1-3 "<title>"
 
 ## Downloads
 
-`_nime -d` writes straight into the folder your desktop calls downloads, so
-there is nothing to pick and no folder of its own to dig out of:
+`_nime -d` keeps everything in one place: a `_nime downloads` folder inside the
+folder your desktop calls downloads, a folder per series inside that, and the
+episodes in it.
+
+```
+~/Downloads/_nime downloads/Cyberpunk_ Edgerunners/E1.mp4
+~/Downloads/_nime downloads/Cyberpunk_ Edgerunners/E2.mp4
+```
+
+The download folder is the first of these that exists, so there is nothing to
+pick:
 
 1. `_NIME_DOWNLOAD_DIR`, if you set it,
 2. the XDG download dir from `~/.config/user-dirs.dirs`,
@@ -335,8 +344,7 @@ there is nothing to pick and no folder of its own to dig out of:
 4. `~/Desktop`,
 5. your home directory.
 
-On Android that is `/storage/emulated/0/Download`. Files are named
-`<title>_E<episode>.mp4`.
+On Android that is `/storage/emulated/0/Download/_nime downloads`.
 
 Downloads are `.mp4` with the subtitles **muxed into the file** as a soft track,
 so they travel with the video: every normal player (mpv, VLC, QuickTime, IINA,
@@ -348,7 +356,7 @@ If `ffmpeg` is missing, the subtitles cannot be embedded and are saved next to
 the video as `<title>_E<episode>.en.vtt` instead.
 
 ```sh
-_nime -d -e 1-3 "<title>"     # three files in ~/Downloads
+_nime -d -e 1-3 "<title>"     # three files in _nime downloads/<title>/
 ```
 
 ### Subtitle languages
@@ -431,7 +439,7 @@ failing.
 | `_NIME_PLAYER_FLAGS` | extra flags for the player |
 | `_NIME_MENU` | `fzf` (default) or `none` |
 | `_NIME_HIST_DIR` | history directory |
-| `_NIME_DOWNLOAD_DIR` | where downloads go (default: your downloads folder) |
+| `_NIME_DOWNLOAD_DIR` | the downloads folder itself (default: your downloads folder) |
 | `_NIME_SKIP` | `1` to always skip intros and outros |
 | `_NIME_SUB_LANG` | default subtitle language |
 | `_NIME_COLOR` | `0` to disable colours |

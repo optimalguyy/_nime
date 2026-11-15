@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.7.3"
+version="1.8.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -115,7 +115,7 @@ help_info() {
 	  _NIME_PLAYER_FLAGS   extra flags handed to the player
 	  _NIME_MENU           fzf (default) or none for a numbered prompt
 	  _NIME_HIST_DIR       where the history file lives
-	  _NIME_DOWNLOAD_DIR   where downloads go (default: your Downloads folder)
+	  _NIME_DOWNLOAD_DIR   where downloads go (default: your downloads folder)
 	  _NIME_SKIP           set to 1 to always skip intros and outros
 	  _NIME_SUB_LANG       default subtitle language
 	  _NIME_COLOR          set to 0 to disable colours
@@ -1115,9 +1115,10 @@ update_history() {
 # playback
 # ---------------------------------------------------------------------------
 
-# where downloads land: the folder the desktop itself uses, so nothing has to
-# be picked. it is the first one that exists: an XDG download dir, Downloads,
-# Desktop, otherwise home. _NIME_DOWNLOAD_DIR overrides all of it.
+# the downloads folder itself: the one the desktop uses, so nothing has to be
+# picked. it is the first that exists: an XDG download dir, Downloads, Desktop,
+# otherwise home. _NIME_DOWNLOAD_DIR overrides all of it. the files go into a
+# _nime downloads folder inside it, one folder per series.
 download_dir() {
 	if [ -n "$_NIME_DOWNLOAD_DIR" ]; then
 		printf '%s' "$_NIME_DOWNLOAD_DIR"
@@ -1158,13 +1159,18 @@ download_dir() {
 # (selectable) track, which mpv, vlc, quicktime and every normal player lists
 # in its subtitle menu.
 download_video() {
-	_dl_dir=$(download_dir)
+	# one folder per series inside _nime downloads, so a binge does not mix with
+	# the rest of the downloads folder
+	_base=$(download_dir)
+	_show=$(printf '%s' "$anime_title" | sed 's|[/\\:*?"<>|]|_|g; s|  *| |g; s|^ *||; s| *$||')
+	[ -z "$_show" ] && _show=_nime
+	_dl_dir="$_base/_nime downloads/$_show"
 	if ! mkdir -p "$_dl_dir" 2>/dev/null; then
 		warn "Could not create $_dl_dir, using the current directory"
 		_dl_dir=$(pwd)
 	fi
 
-	_name=$(printf '%s' "$anime_title" | sed 's|[/\\:*?"<>|]|_|g; s|  *| |g; s| *$||')_E${ep_no}
+	_name="E${ep_no}"
 	_tmpd=$(mktemp -d 2>/dev/null)
 	[ -d "$_tmpd" ] || {
 		_tmpd="$_dl_dir/.nime-tmp-$$"
@@ -1265,7 +1271,7 @@ download_video() {
 		return 0
 	fi
 
-	if [ -d "$_tmpd/subs" ]; then
+	if [ -f "$_tmpd/subs/index.tsv" ]; then
 		while IFS=$TAB read -r _n _code; do
 			cp "$_tmpd/subs/sub-$_n.vtt" "$_dl_dir/$_name.$_code.vtt" 2>/dev/null
 		done <"$_tmpd/subs/index.tsv"
