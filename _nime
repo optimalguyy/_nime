@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.8"
+version="1.9.9"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -235,7 +235,7 @@ check_deps() {
 		elif android_app is.xyz.mpv; then
 			printf '  the mpv app is installed and opens the stream\n'
 		else
-			printf '  no player app, the Play Store opens for VLC first\n'
+			printf '  no player app, the Play Store opens for VLC\n'
 		fi
 	fi
 }
@@ -1525,18 +1525,6 @@ android_app() {
 	pm list packages 2>/dev/null | grep -q "^package:$1$"
 }
 
-# android_web <url> -> a browser took the stream
-# the browsable category is what keeps this to browsers: a gallery or a video
-# app is not offered the link at all, which is where it used to end up
-android_web() {
-	_out=$(am start --user 0 -a android.intent.action.VIEW \
-		-c android.intent.category.BROWSABLE -d "$1" 2>&1)
-	case "$_out" in
-		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
-	esac
-	return 0
-}
-
 # android_store -> the Play Store page for VLC is open, or its web page when the
 # device has no store (an F-Droid only install, for one)
 android_store() {
@@ -1558,78 +1546,28 @@ android_play_vlc() {
 		-e "title" "$anime_title $ep_label" >/dev/null 2>&1 &
 }
 
-android_play_mpv() {
-	nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
-		-n is.xyz.mpv/.MPVActivity -e "title" "$anime_title $ep_label" \
-		$player_extra_flags >/dev/null 2>&1 &
-}
-
 android_mpv() {
-	_conf_dir="/storage/emulated/0/mpv"
-	if [ -w "${_conf_dir%/mpv}" ]; then
-		[ -d "$_conf_dir" ] || mkdir "$_conf_dir"
-		printf 'referrer=%s\n%s\n' "$refr" "${sub_link:+sub-file=$sub_link}" >"$_conf_dir/mpv.config.mp4"
-	fi
 	if ! command -v am >/dev/null 2>&1; then
 		warn "This phone has no am command, so nothing can be handed to a player"
 		warn "On Termux: pkg install termux-am"
-		printf '%s\n' "$video_link"
+		printf '\n%s\n' "$video_link"
 		return 1
 	fi
-	# VLC leads: it plays these streams as they are, so it is asked for once and
-	# the episode starts by itself as soon as the app is on the phone, with no
-	# second command to type
 	if android_app org.videolan.vlc; then
 		android_play_vlc
 		return 0
 	fi
+	# VLC is the one that plays these streams, so a phone without it gets the
+	# store page, and the continue command for after: that run finds VLC and
+	# starts the episode straight away, with nothing to search again
 	warn "VLC is what plays these streams, and it is not installed"
 	if android_store; then
-		warn "Install it there, then come back: the episode starts on its own"
+		warn "Install it from the store, then run: _nime -c -S 1"
 	else
-		warn "No store found, get it from https://www.videolan.org/vlc/download-android.html"
-	fi
-	printf 'waiting for VLC, up to five minutes: the episode starts by itself\n'
-	# two seconds apart, five minutes in all; the loop also covers the wait spent
-	# inside the store, since Termux is only paused while it is in the background
-	_wait=0
-	while [ "$_wait" -lt "${_NIME_VLC_WAIT:-150}" ]; do
-		sleep 2
-		_wait=$((_wait + 1))
-		android_app org.videolan.vlc && break
-	done
-	if android_app org.videolan.vlc; then
-		info "VLC is there, playing $ep_label"
-		android_play_vlc
-		return 0
-	fi
-	warn "VLC did not appear, so whatever else this phone has is used"
-	if android_app is.xyz.mpv; then
-		android_play_mpv
-		return 0
-	fi
-	# neither app is installed, so the web gets it: a browser is opened with the
-	# link, never the gallery
-	if android_web "$video_link"; then
-		return 0
-	fi
-	warn "No app on this phone wanted the stream, so the url is printed instead"
-	warn "VLC plays these on Android: https://www.videolan.org/vlc/download-android.html"
-	printf '%s\n' "$video_link"
-	# nothing is playing, so the episode menu must not jump ahead before the link
-	# has been read
-	if [ -t 0 ]; then
-		printf 'Press enter when done with it '
-		read -r _ignored
+		warn "Get it from https://www.videolan.org/vlc/download-android.html"
+		warn "then run: _nime -c -S 1"
 	fi
 	return 1
-}
-
-# print_mode: no player available, so hand the urls over instead of dying
-print_stream() {
-	printf '%s\n' "$video_link"
-	[ -n "$sub_link" ] && printf 'subtitle: %s\n' "$sub_link" >&2
-	printf 'referer: %s\n' "$refr" >&2
 }
 
 play_episode() {

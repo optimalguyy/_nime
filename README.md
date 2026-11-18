@@ -153,16 +153,17 @@ are; a phone's gallery or stock video player does not, and answers with
 # from F-Droid, Play Store or https://www.videolan.org/vlc/download-android.html
 ```
 
-The mpv **app** from F-Droid is just as good: install it and Android hands the
-stream to it — the command line `mpv` that `pkg` installs is not what plays it.
+If VLC is not installed, `_nime` **opens the Play Store page for it** and tells
+you the one command to run afterwards:
 
-If VLC is not installed, `_nime` **opens the Play Store page for it** and waits:
-install it, come back to Termux, and the episode starts on its own — there is no
-second command to type. After five minutes it gives up on VLC and uses whatever
-else the phone has: the **mpv app** first, then the **browser**, which is given
-the link directly. The gallery and the stock video player are never offered the
-stream, and the url is printed only when nothing at all takes it.
-`_nime --check-deps` says which one will happen.
+```sh
+_nime -c -S 1     # the episode you were on, straight into VLC
+```
+
+`-c` takes it from your history and `-S 1` picks the newest entry without a menu
+prompt, so nothing is searched or chosen again. The gallery, the stock video
+player and the browser are never handed the stream. `_nime --check-deps` says
+whether VLC is there or the store will be opened.
 
 `termux-setup-storage` gives `_nime` the shared `Downloads` folder; without it
 downloads land in the Termux home.
