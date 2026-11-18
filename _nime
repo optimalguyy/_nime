@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.8"
+version="1.8.9"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1418,9 +1418,12 @@ play_episode() {
 
 	if [ "$player_running" = 1 ] && [ "$player_ipc" = 1 ] && [ -n "$player_sock" ]; then
 		player_cmd "{\"command\":[\"set_property\",\"alang\",\"$audio_lang\"]}"
+		# the title has to be set through the option, before the load: media-title
+		# is read only, so setting it afterwards did nothing and the window kept
+		# the title of the first episode while playing a different one
+		player_cmd "{\"command\":[\"set_property\",\"options/force-media-title\",\"$(json_escape "$anime_title $ep_label")\"]}"
 		player_cmd "{\"command\":[\"loadfile\",\"$(json_escape "$video_link")\",\"replace\"]}"
 		[ -n "$sub_link" ] && player_cmd "{\"command\":[\"sub-add\",\"$(json_escape "$sub_link")\",\"select\"]}"
-		player_cmd "{\"command\":[\"set_property\",\"media-title\",\"$(json_escape "$anime_title $ep_label")\"]}"
 		clear_status
 		replay="$video_link"
 		unset video_link
