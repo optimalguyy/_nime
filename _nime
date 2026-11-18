@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.11"
+version="1.9.12"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1556,6 +1556,145 @@ android_store() {
 	return 0
 }
 
+# the streams answer 403 without the site's referrer, and the player app accepts no
+# headers through an intent, so the app is given a local address that sends them
+# for it: a small proxy in this session fetches the playlist and every segment
+# with the referrer, and VLC just plays what it is handed
+android_proxy_start() {
+	command -v python3 >/dev/null 2>&1 || return 1
+	_s="${TMPDIR:-/tmp}/_nime-proxy.py"
+	cat >"$_s" <<'PY'
+import base64, os, re, sys, socketserver, urllib.parse, urllib.request
+from http.server import BaseHTTPRequestHandler
+
+REF = sys.argv[1] if len(sys.argv) > 1 else ""
+UA = sys.argv[2] if len(sys.argv) > 2 else ""
+PORT = int(sys.argv[3]) if len(sys.argv) > 3 else 8770
+
+
+def enc(url):
+    return base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+
+
+def dec(payload):
+    try:
+        return base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode()
+    except Exception:
+        return ""
+
+
+def proxied(base, ref):
+    target = urllib.parse.urljoin(base, ref)
+    ext = os.path.splitext(urllib.parse.urlparse(target).path)[1] or ".bin"
+    return "/p/x" + ext + "?u=" + enc(target)
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *args):
+        pass
+
+    def target(self):
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        return dec(query.get("u", [""])[0])
+
+    def handle_one(self):
+        if self.path == "/health":
+            body = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        url = self.target()
+        if not url:
+            self.send_error(404)
+            return
+        request = urllib.request.Request(
+            url, headers={"User-Agent": UA or "Mozilla/5.0", "Referer": REF})
+        try:
+            upstream = urllib.request.urlopen(request, timeout=30)
+            data = upstream.read()
+        except Exception:
+            self.send_error(502)
+            return
+        ctype = (upstream.headers.get("Content-Type") or "").lower()
+        if "mpegurl" in ctype or data[:7] == b"#EXTM3U":
+            lines = []
+            for line in data.decode("utf-8", "replace").splitlines():
+                stripped = line.strip()
+                if not stripped:
+                    lines.append(line)
+                elif stripped.startswith("#"):
+                    # keys and other URIs live inside tag lines
+                    lines.append(re.sub(
+                        r'URI="([^"]+)"',
+                        lambda m: 'URI="%s"' % proxied(url, m.group(1)), line))
+                else:
+                    lines.append(proxied(url, stripped))
+            body = ("\n".join(lines) + "\n").encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/vnd.apple.mpegurl")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        # the cdn answers segments with whatever it likes, image/jpeg included,
+        # so the type comes from the name this proxy gave the piece instead
+        suffix = os.path.splitext(urllib.parse.urlparse(self.path).path)[1].lower()
+        types = {".ts": "video/mp2t", ".m4s": "video/iso.segment",
+                 ".mp4": "video/mp4", ".aac": "audio/aac",
+                 ".vtt": "text/vtt", ".key": "application/octet-stream"}
+        self.send_response(200)
+        self.send_header("Content-Type", types.get(suffix, "application/octet-stream"))
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    do_GET = handle_one
+    do_HEAD = handle_one
+
+
+socketserver.TCPServer.allow_reuse_address = True
+with socketserver.ThreadingTCPServer(("127.0.0.1", PORT), Handler) as server:
+    server.serve_forever()
+PY
+	[ -s "$_s" ] || return 1
+	# the proxy has to outlive the terminal while the player is in front
+	command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock >/dev/null 2>&1
+	_portfile="${TMPDIR:-/tmp}/_nime-proxy.port"
+	if [ -f "$_portfile" ]; then
+		_p=$(cat "$_portfile" 2>/dev/null)
+		if [ -n "$_p" ] && curl -fsS --max-time 2 "http://127.0.0.1:$_p/health" >/dev/null 2>&1; then
+			printf '%s' "$_p"
+			return 0
+		fi
+	fi
+	for _p in 8770 8771 8772 8773 8774 8775; do
+		python3 "$_s" "$refr" "$agent" "$_p" >/dev/null 2>&1 &
+		_i=0
+		while [ "$_i" -lt 15 ]; do
+			sleep 0.2
+			if curl -fsS --max-time 1 "http://127.0.0.1:$_p/health" >/dev/null 2>&1; then
+				printf '%s' "$_p" >"$_portfile"
+				printf '%s' "$_p"
+				return 0
+			fi
+			_i=$((_i + 1))
+		done
+	done
+	return 1
+}
+
+android_watch_url() {
+	_p=$(android_proxy_start) || return 1
+	_enc=$(printf '%s' "$video_link" | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+	[ -n "$_enc" ] || return 1
+	_watch_url="http://127.0.0.1:$_p/p/x.m3u8?u=$_enc"
+}
+
 # android_vlc_playlist -> a playlist holding the stream and the referrer
 # the streams answer 403 to a request without the referrer, and the VLC app takes
 # no headers through an intent; a playlist it reads does carry them, so that is
@@ -1583,6 +1722,16 @@ android_vlc_playlist() {
 # the app is asked to open it rather than looked up in a list: that is the same
 # question, and it cannot be answered wrong by a missing pm
 android_play_vlc() {
+	# the proxy is the one that works: it sends the headers the app cannot
+	if android_watch_url; then
+		_out=$(am start --user 0 -a android.intent.action.VIEW -d "$_watch_url" \
+			-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
+			-e "title" "$anime_title $ep_label" 2>&1)
+		case "$_out" in
+			*"Error"* | *"Exception"* | *"not found"*) : ;;
+			*) return 0 ;;
+		esac
+	fi
 	_pl=$(android_vlc_playlist) && [ -n "$_pl" ] && {
 		_out=$(am start --user 0 -a android.intent.action.VIEW -d "file://$_pl" \
 			-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \

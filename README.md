@@ -154,10 +154,11 @@ are; a phone's gallery or stock video player does not, and answers with
 ```
 
 If VLC is installed, the episode goes straight into VLC. These streams answer
-`403` to anything that does not send the site's referrer, and the VLC app takes
-no headers through an intent — so `_nime` writes a small playlist carrying the
-referrer and the user agent, and hands VLC that. It needs `termux-setup-storage`
-once, because only the shared folder can be read by another app.
+`403` to anything that does not send the site's referrer, and the VLC app accepts
+no headers at all — so `_nime` starts a small proxy in the session, which fetches
+the playlist and every segment with the referrer the site wants, and hands VLC a
+local address to play. The proxy keeps running while VLC is in front, and one
+wake lock keeps the session alive for it.
 
 If VLC is not installed, `_nime` **opens the Google Play page for it** (named by
 package, so another store cannot take the link) and tells you the one command to
