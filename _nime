@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.6"
+version="1.9.7"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1525,11 +1525,12 @@ android_app() {
 	pm list packages 2>/dev/null | grep -q "^package:$1$"
 }
 
-# android_view <url> -> some app on the phone accepted the stream
-# no component is named, and no type either: a plain http link goes to whatever
-# handles links, which is the browser, and a browser plays these streams
-android_view() {
-	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$1" 2>&1)
+# android_web <url> -> a browser took the stream
+# the browsable category is what keeps this to browsers: a gallery or a video
+# app is not offered the link at all, which is where it used to end up
+android_web() {
+	_out=$(am start --user 0 -a android.intent.action.VIEW \
+		-c android.intent.category.BROWSABLE -d "$1" 2>&1)
 	case "$_out" in
 		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
 	esac
@@ -1563,9 +1564,9 @@ android_mpv() {
 			$player_extra_flags >/dev/null 2>&1 &
 		return 0
 	fi
-	# neither app is installed, so the browser gets it: the gallery and the stock
-	# video player refuse a stream they do not host, a browser plays it
-	if android_view "$video_link"; then
+	# neither app is installed, so the web gets it: a browser is opened with the
+	# link, never the gallery
+	if android_web "$video_link"; then
 		return 0
 	fi
 	warn "No app on this phone wanted the stream, so the url is printed instead"

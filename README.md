@@ -155,10 +155,11 @@ are; a phone's gallery or stock video player does not, and answers with
 
 The mpv **app** from F-Droid is just as good: install it and Android hands the
 stream to it — the command line `mpv` that `pkg` installs is not what plays it.
-With VLC installed that is what opens: VLC first, the mpv app next, and the
-browser after that, since a browser plays the stream where a gallery refuses it.
-The url is printed only when no app wants it at all. `_nime --check-deps` says
-which of the four will happen.
+
+What opens, in order: **VLC** if it is installed, the **mpv app** next, and
+otherwise the **browser**, which is given the link directly. The gallery and the
+stock video player are never offered the stream. The url is printed only when not
+even a browser takes it. `_nime --check-deps` says which one will happen.
 
 `termux-setup-storage` gives `_nime` the shared `Downloads` folder; without it
 downloads land in the Termux home.

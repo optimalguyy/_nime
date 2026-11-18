@@ -1,6 +1,6 @@
 # Maintainer: optimalguyy <https://github.com/optimalguyy>
 pkgname=_nime
-pkgver=1.9.6
+pkgver=1.9.7
 pkgrel=1
 pkgdesc="Terminal client for watching anime"
 arch=('any')
