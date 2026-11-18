@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.5"
+version="1.9.6"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -230,12 +230,12 @@ check_deps() {
 	esac
 	# which app actually receives the stream, not just how it is sent
 	if [ "$player_function" = android_mpv ]; then
-		if android_app is.xyz.mpv; then
-			printf '  the mpv app is installed\n'
-		elif android_app org.videolan.vlc; then
-			printf '  no mpv app, the VLC app is used\n'
+		if android_app org.videolan.vlc; then
+			printf '  the VLC app is installed and opens the stream\n'
+		elif android_app is.xyz.mpv; then
+			printf '  the mpv app is installed and opens the stream\n'
 		else
-			printf '  no player app, the phone picks (its gallery or what it has)\n'
+			printf '  no player app, the stream opens in the browser\n'
 		fi
 	fi
 }
@@ -1525,11 +1525,11 @@ android_app() {
 	pm list packages 2>/dev/null | grep -q "^package:$1$"
 }
 
-# android_view <url> <mime> -> some app on the phone accepted the stream
-# no component is named, so Android shows what it has: its own gallery, a video
-# player, anything that claims the type
+# android_view <url> -> some app on the phone accepted the stream
+# no component is named, and no type either: a plain http link goes to whatever
+# handles links, which is the browser, and a browser plays these streams
 android_view() {
-	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$1" -t "$2" 2>&1)
+	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$1" 2>&1)
 	case "$_out" in
 		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
 	esac
@@ -1548,30 +1548,28 @@ android_mpv() {
 		printf '%s\n' "$video_link"
 		return 1
 	fi
-	if android_app is.xyz.mpv; then
-		nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
-			-n is.xyz.mpv/.MPVActivity -e "title" "$anime_title $ep_label" \
-			$player_extra_flags >/dev/null 2>&1 &
-		return 0
-	fi
 	# an intent for an app that is not there fails silently, so the app is looked
-	# up first; VLC is used when it is the one that is installed
+	# up first. VLC leads: it plays these streams as they are, which the mpv app
+	# does too, and it is the one that is easy to recommend on Android
 	if android_app org.videolan.vlc; then
 		nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
 			-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
 			-e "title" "$anime_title $ep_label" >/dev/null 2>&1 &
 		return 0
 	fi
-	# nothing that plays streams is installed, so the phone's own players get a
-	# turn: its gallery or video app if it lists the type, and the stream url is
-	# only printed when no app wants it at all
-	for _mime in "video/*" "application/x-mpegURL" "application/vnd.apple.mpegurl"; do
-		if android_view "$video_link" "$_mime"; then
-			return 0
-		fi
-	done
+	if android_app is.xyz.mpv; then
+		nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
+			-n is.xyz.mpv/.MPVActivity -e "title" "$anime_title $ep_label" \
+			$player_extra_flags >/dev/null 2>&1 &
+		return 0
+	fi
+	# neither app is installed, so the browser gets it: the gallery and the stock
+	# video player refuse a stream they do not host, a browser plays it
+	if android_view "$video_link"; then
+		return 0
+	fi
 	warn "No app on this phone wanted the stream, so the url is printed instead"
-	warn "Install mpv from F-Droid: https://f-droid.org/packages/is.xyz.mpv/"
+	warn "VLC plays these on Android: https://www.videolan.org/vlc/download-android.html"
 	printf '%s\n' "$video_link"
 	# nothing is playing, so the episode menu must not jump ahead before the link
 	# has been read

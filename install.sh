@@ -284,7 +284,9 @@ if [ -n "$left" ]; then
 	case "$pm" in
 		termux)
 			# the player on Android is an app, not the package of the same name
-			printf '\nmpv on Android is the app from F-Droid, which pkg cannot install:\n'
+			printf '\nOn Android the player is an app, which pkg cannot install. VLC is the\n'
+			printf 'recommended one, and the mpv app works too:\n'
+			printf '  https://www.videolan.org/vlc/download-android.html\n'
 			printf '  https://f-droid.org/packages/is.xyz.mpv/\n'
 			;;
 		dnf)
@@ -315,7 +317,9 @@ case "$pm" in
 		# player is an app: the command line mpv pkg installs is not what Android
 		# hands a stream to
 		printf '\nOn Android, termux-setup-storage gives _nime the shared Downloads folder.\n'
-		printf 'The player is the mpv app from F-Droid: https://f-droid.org/packages/is.xyz.mpv/\n'
+		printf 'The player is an app: VLC is the recommended one,\n'
+		printf 'https://www.videolan.org/vlc/download-android.html\n'
+		printf 'The mpv app from F-Droid works too: https://f-droid.org/packages/is.xyz.mpv/\n'
 		;;
 esac
 

@@ -145,12 +145,20 @@ only the library, and `_nime` needs the command to decrypt the stream links.
 `pkg install` needs no root and no `sudo` on Termux, and the installer above uses
 it that way.
 
-Install the mpv **app** from F-Droid as well: Android hands the stream to it, the
-command line `mpv` that `pkg` installs is not what plays it.
-VLC works too, with `_nime -v`. With neither app installed the stream is offered
-to whatever the phone opens for video — its own gallery or player — and the url
-is printed only when nothing takes it. `_nime --check-deps` says which of the
-three will happen.
+**VLC is the recommended player on Android.** It handles these streams as they
+are; a phone's gallery or stock video player does not, and answers with
+"Can't play this video".
+
+```sh
+# from F-Droid, Play Store or https://www.videolan.org/vlc/download-android.html
+```
+
+The mpv **app** from F-Droid is just as good: install it and Android hands the
+stream to it — the command line `mpv` that `pkg` installs is not what plays it.
+With VLC installed that is what opens: VLC first, the mpv app next, and the
+browser after that, since a browser plays the stream where a gallery refuses it.
+The url is printed only when no app wants it at all. `_nime --check-deps` says
+which of the four will happen.
 
 `termux-setup-storage` gives `_nime` the shared `Downloads` folder; without it
 downloads land in the Termux home.
