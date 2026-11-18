@@ -312,11 +312,17 @@ the dub, `_nime` says so and names what it would take:
 No sources found for episode 3: no English dub for it (the dub may not be out yet; --sub plays the original audio)
 ```
 
-A source with no dub for an episode can still answer the dubbed URL, handing the
-original file straight back. `_nime` resolves the subbed stream of the same
-episode and compares the two by media id (so the same file on a different host
-still counts as the same file), treats a match as no dub and tries the other
-source instead, without printing anything about it: the episode simply plays.
+A stream can hold every audio language as a rendition of one file, and the
+original language is usually the one it marks as the default. A player follows
+that default, so a dubbed URL could still come out Japanese. `_nime` reads the
+renditions: an English one is what plays, and it is made the only and default
+one on the way to the player. mpv and VLC are told the language too.
+
+A source with no dub for an episode can still answer the dubbed URL, with no
+English rendition or with the subbed file itself. The subbed stream of the same
+episode is resolved and compared by media id (so the same file on a different
+host still counts as the same file); a match means no dub there, and the other
+source is tried instead, without printing anything about it.
 
 The other source is searched for the same series, not for a show whose title
 happens to start the same way, so a lookup that lands on a different season or a

@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.19"
+version="1.9.20"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1147,17 +1147,6 @@ resolve_episode() {
 	[ -z "$_m3u8" ] && _m3u8=$(printf '%s' "$_plain" | grep -oE 'https://[^"]*\.m3u8[^"]*' | head -n 1)
 	[ -z "$_m3u8" ] && return 1
 
-	# a source without a dub for the episode still answers the dub url: it hands
-	# the subbed file back, so the same file for both means this is not a dub
-	if [ "$mode" = dub ]; then
-		_sub_embed=$(sub_embed_for "$2")
-		if [ -n "$_sub_embed" ]; then
-			_sub_file=$(file_of_embed "$_sub_embed")
-			if [ -n "$_sub_file" ] && [ "$(media_key "$_sub_file")" = "$(media_key "$_m3u8")" ]; then
-				return 1
-			fi
-		fi
-	fi
 
 	# skip marks: the player hands us the intro and outro ranges
 	_intro_obj=$(printf '%s' "$_plain" | grep -oE '"intro":\{[^}]*\}' | head -n 1)
@@ -1198,6 +1187,26 @@ resolve_episode() {
 	fi
 
 	_playlist=$(http_get "$_m3u8" "$refr")
+
+	# a stream can hold both audio languages as renditions of one file, and the
+	# original one is what it marks as the default, so a player takes Japanese
+	# even from the dubbed url. dub means the English rendition is played
+	_audio_group=$(printf '%s' "$_playlist" | grep -c 'EXT-X-MEDIA:TYPE=AUDIO')
+	_audio_en=$(printf '%s' "$_playlist" | grep 'EXT-X-MEDIA:TYPE=AUDIO' | grep -c 'LANGUAGE="en')
+	if [ "$mode" = dub ]; then
+		# a source without a dub still answers the dubbed url, either with a
+		# stream that has no English rendition or with the subbed file itself
+		if [ "$_audio_group" -gt 0 ]; then
+			[ "$_audio_en" -eq 0 ] && return 1
+		else
+			_sub_embed=$(sub_embed_for "$2")
+			if [ -n "$_sub_embed" ]; then
+				_sub_file=$(file_of_embed "$_sub_embed")
+				[ -n "$_sub_file" ] &&
+					[ "$(media_key "$_sub_file")" = "$(media_key "$_m3u8")" ] && return 1
+			fi
+		fi
+	fi
 	links=$(printf '%s\n' "$_playlist" |
 		sed 's|^#EXT-X-STREAM.*x||g; s|,.*|p|g; /^#/d; $!N; s|\n| >|; /EXT-X-I-FRAME/d' |
 		sed "\|>https*://|!s|>|>${_m3u8%/*}/|" | sort -gr -s)
@@ -1495,8 +1504,16 @@ download_video() {
 			info "Server is limiting requests, continuing on a single connection..."
 		done
 	elif command -v ffmpeg >/dev/null 2>&1; then
-		ffmpeg -loglevel error -referer "$refr" -i "$video_link" \
-			-c copy -bsf:a aac_adtstoasc "$_tmpd/raw.mp4" && _ok=1
+		# ffmpeg takes the stream's default audio, which is the original one, so
+		# the language is named here before falling back to whatever there is
+		if ffmpeg -loglevel error -y -referer "$refr" -i "$video_link" \
+			-map 0:v:0 -map "0:a:m:language:$_want" \
+			-c copy -bsf:a aac_adtstoasc "$_tmpd/raw.mp4" 2>/dev/null; then
+			_ok=1
+		elif ffmpeg -loglevel error -y -referer "$refr" -i "$video_link" \
+			-c copy -bsf:a aac_adtstoasc "$_tmpd/raw.mp4"; then
+			_ok=1
+		fi
 	else
 		warn "Neither yt-dlp nor ffmpeg found, cannot download"
 		rm -rf "$_tmpd"
@@ -1681,6 +1698,10 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         return dec(query.get("u", [""])[0])
 
+    def lang(self):
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        return (query.get("l", [""])[0] or "")[:2].lower()
+
     def handle_one(self):
         if self.path == "/health":
             body = b"ok"
@@ -1704,8 +1725,27 @@ class Handler(BaseHTTPRequestHandler):
             return
         ctype = (upstream.headers.get("Content-Type") or "").lower()
         if "mpegurl" in ctype or data[:7] == b"#EXTM3U":
+            text = data.decode("utf-8", "replace")
+            # a stream can carry every audio language and mark the original as
+            # the default, which is what a player then plays; only the one this
+            # run asked for is kept, and it is made the default
+            want = self.lang()
+            if want and "#EXT-X-MEDIA" in text:
+                kept = None
+                rest = []
+                for line in text.splitlines():
+                    if "#EXT-X-MEDIA" in line and "TYPE=AUDIO" in line:
+                        if kept is None and re.search(r'LANGUAGE="%s' % want, line, re.I):
+                            kept = line
+                        continue
+                    rest.append(line)
+                if kept is not None:
+                    kept = re.sub(r"DEFAULT=NO", "DEFAULT=YES", kept)
+                    kept = re.sub(r"AUTOSELECT=NO", "AUTOSELECT=YES", kept)
+                    rest.insert(1 if rest and rest[0].strip() == "#EXTM3U" else 0, kept)
+                    text = "\n".join(rest)
             lines = []
-            for line in data.decode("utf-8", "replace").splitlines():
+            for line in text.splitlines():
                 stripped = line.strip()
                 if not stripped:
                     lines.append(line)
@@ -1774,7 +1814,7 @@ android_watch_url() {
 	_p=$(android_proxy_start) || return 1
 	_enc=$(printf '%s' "$video_link" | openssl base64 -A | tr '+/' '-_' | tr -d '=')
 	[ -n "$_enc" ] || return 1
-	_watch_url="http://127.0.0.1:$_p/p/x.m3u8?u=$_enc"
+	_watch_url="http://127.0.0.1:$_p/p/x.m3u8?u=$_enc&l=${audio_lang_short:-en}"
 }
 
 # android_vlc_playlist -> a playlist holding the stream and the referrer
