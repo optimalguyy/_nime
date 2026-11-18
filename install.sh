@@ -1,10 +1,11 @@
 #!/bin/sh
-# install.sh - put _nime where your shell can find it.
+# install.sh - put _nime where your shell can find it, with everything it uses.
 #
 #   sh install.sh                      from a clone
 #   curl -fsSL <raw url> | sh          without one
+#   wget -qO- <raw url> | sh           when curl is the one thing missing
 #
-# It copies files into your home directory and installs whatever _nime needs
+# It copies the files into your home directory and installs whatever _nime needs
 # that is missing, through your own package manager. Nothing starts on its own
 # later. Set _NIME_NO_DEPS=1 to skip the dependency step, _NIME_DEST to change
 # where the scripts go.
@@ -26,21 +27,24 @@ trap cleanup EXIT HUP INT TERM
 src=$(CDPATH='' cd -- "$(dirname -- "$0")" 2>/dev/null && pwd) || src=""
 if [ -z "$src" ] || [ ! -f "$src/_nime" ]; then
 	if ! command -v curl >/dev/null 2>&1; then
-		echo "install.sh: curl is needed to download _nime" >&2
+		printf 'install.sh: curl is needed to download _nime.\n' >&2
+		printf 'With wget instead:\n\n  wget -qO- %s/install.sh | sh\n' "$repo" >&2
 		exit 1
 	fi
 	tmp=$(mktemp -d 2>/dev/null || mktemp -d -t nime) || exit 1
 	src=$tmp
 	for _f in _nime _nime-dl _nime.1; do
 		curl -fsSL "$repo/$_f" -o "$src/$_f" || {
-			echo "install.sh: could not download $_f" >&2
+			printf 'install.sh: could not download %s\n' "$_f" >&2
 			exit 1
 		}
 	done
 fi
 
+[ -f "$src/_nime-dl" ] || cp "$src/_nime" "$src/_nime-dl" 2>/dev/null || true
+
 mkdir -p "$dest" || {
-	echo "install.sh: cannot create $dest" >&2
+	printf 'install.sh: cannot create %s\n' "$dest" >&2
 	exit 1
 }
 cp "$src/_nime" "$src/_nime-dl" "$dest/" || exit 1
@@ -60,19 +64,61 @@ case ":${PATH}:" in
 		printf '\n%s is not on your PATH yet, add it once:\n\n' "$dest"
 		printf '  bash:  echo '\''export PATH="%s:$PATH"'\'' >> ~/.bashrc\n' "$dest"
 		printf '  zsh:   echo '\''export PATH="%s:$PATH"'\'' >> ~/.zshrc\n' "$dest"
-		printf '  fish:  fish_add_path %s\n' "$dest"
-		printf '\n'
+		printf '  fish:  fish_add_path %s\n\n' "$dest"
 		;;
 esac
 
 # ---------------------------------------------------------------------------
-# dependencies: a picker, a player, and the two programs downloads are made with
+# dependencies
 # ---------------------------------------------------------------------------
-want="fzf mpv yt-dlp ffmpeg python3 openssl"
+# curl for every request, sed/grep/awk for reading the pages, openssl for the
+# stream payload, fzf for the menus, mpv for playing, python3 so a second
+# episode replaces the first instead of opening another window, yt-dlp and
+# ffmpeg for downloads
+tools="curl openssl fzf mpv python3 yt-dlp ffmpeg"
+
+# which package manager, and through it the name each program has there
+pm=""
+if { [ -n "${TERMUX_VERSION:-}" ] || [ -n "${ANDROID_ROOT:-}" ]; } && command -v pkg >/dev/null 2>&1; then
+	pm=termux
+	tools="$tools termux-am"
+elif command -v pacman >/dev/null 2>&1; then
+	pm=pacman
+elif command -v apt-get >/dev/null 2>&1; then
+	pm=apt
+elif command -v dnf >/dev/null 2>&1; then
+	pm=dnf
+elif command -v zypper >/dev/null 2>&1; then
+	pm=zypper
+elif command -v apk >/dev/null 2>&1; then
+	pm=apk
+elif command -v brew >/dev/null 2>&1; then
+	pm=brew
+	tools="fzf mpv python3 yt-dlp ffmpeg"
+fi
+
+# there is no player inside iSH, so asking for one there would only fail; the
+# stream url and a vlc:// link are what it gets instead
+case "$(uname -a 2>/dev/null)" in
+	*iSH* | *ISH*) tools="curl openssl fzf" ;;
+esac
+
+# the package that carries a program, on this system
+pkg_for() {
+	case "$pm:$1" in
+		termux:python3) printf 'python' ;;
+		termux:yt-dlp) printf 'python-yt-dlp' ;;
+		pacman:python3) printf 'python' ;;
+		brew:python3) printf 'python' ;;
+		brew:openssl) printf 'openssl@3' ;;
+		dnf:ffmpeg) printf 'ffmpeg-free' ;;
+		*) printf '%s' "$1" ;;
+	esac
+}
 
 missing=""
-for _d in $want; do
-	command -v "$_d" >/dev/null 2>&1 || missing="$missing $_d"
+for _t in $tools; do
+	command -v "$_t" >/dev/null 2>&1 || missing="$missing $(pkg_for "$_t")"
 done
 
 if [ -z "$missing" ]; then
@@ -80,39 +126,19 @@ if [ -z "$missing" ]; then
 elif [ "${_NIME_NO_DEPS:-0}" = 1 ]; then
 	printf 'skipped installing:%s\n' "$missing"
 else
-	# the names are the same package names everywhere except on a Mac, where
-	# brew and the menu program live in their own formulas
-	if [ -n "${TERMUX_VERSION:-}" ] && command -v pkg >/dev/null 2>&1; then
-		pm="install"; pm_quiet="-y"
-	elif command -v pacman >/dev/null 2>&1; then
-		pm="pacman"; pm_quiet="--needed --noconfirm"
-	elif command -v apt-get >/dev/null 2>&1; then
-		pm="apt-get"; pm_quiet="install -y"
-	elif command -v dnf >/dev/null 2>&1; then
-		pm="dnf"; pm_quiet="install -y"
-	elif command -v zypper >/dev/null 2>&1; then
-		pm="zypper"; pm_quiet="install -y"
-	elif command -v apk >/dev/null 2>&1; then
-		pm="apk"; pm_quiet="add"
-	elif command -v brew >/dev/null 2>&1; then
-		pm="brew"; pm_quiet="install"
-	else
-		pm=""
-	fi
+	# certificates are not a program, but every https request needs them
+	case "$pm" in
+		pacman | apt | dnf | zypper | apk | termux) missing="$missing ca-certificates" ;;
+	esac
 
 	if [ -z "$pm" ]; then
 		printf '\nNo package manager found. Install these yourself:%s\n' "$missing"
+		missing_howto="yes"
 	elif [ "$pm" = brew ]; then
 		printf 'installing:%s (brew)\n' "$missing"
-		for _p in fzf mpv yt-dlp ffmpeg python openssl@3; do
-			case "$missing " in
-				*" ${_p%@*} "*) brew install "$_p" || true ;;
-			esac
-		done
-		printf 'done\n'
+		# shellcheck disable=SC2086
+		brew install $missing || true
 	else
-		pkgs="$missing"
-
 		if [ "$(id -u)" = 0 ]; then
 			privileged=""
 		elif command -v sudo >/dev/null 2>&1; then
@@ -127,30 +153,104 @@ else
 		if [ "$privileged" = sudo ] && ! sudo -n true 2>/dev/null; then
 			if ( : </dev/tty ) 2>/dev/null; then
 				ask=1
-			elif [ -z "$privileged" ]; then
-				ask=-1
 			else
-				ask=-1
+				privileged=""
 			fi
 		fi
 
-		if [ "$ask" = -1 ]; then
-			printf '\nInstalling these needs a password, run:\n\n  sudo %s %s%s\n' \
-				"$pm" "$pm_quiet" "$pkgs"
-		elif [ -z "$privileged" ] && [ "$(id -u)" != 0 ]; then
-			printf '\nNo sudo here, install these yourself:\n\n  %s %s%s\n' "$pm" "$pm_quiet" "$pkgs"
+		case "$pm" in
+			termux) base="pkg install -y" ;;
+			pacman) base="pacman -S --needed --noconfirm" ;;
+			apt) base="apt-get install -y" ;;
+			dnf) base="dnf install -y" ;;
+			zypper) base="zypper install -y" ;;
+			apk) base="apk add" ;;
+			*) base="$pm install -y" ;;
+		esac
+
+		if [ -z "$privileged" ] && [ "$(id -u)" != 0 ]; then
+			printf '\nInstalling these needs a password, run:\n\n  sudo %s%s\n' "$base" "$missing"
+			missing_howto="yes"
 		else
-			printf 'installing:%s (%s)\n' "$pkgs" "$pm"
-			[ "$pm" = apt-get ] && { $privileged apt-get update -qq || true; }
+			printf 'installing:%s (%s)\n' "$missing" "$pm"
+			[ "$pm" = apt ] && { $privileged apt-get update -qq || true; }
 			if [ "$ask" = 1 ]; then
-				$privileged "$pm" $pm_quiet $pkgs </dev/tty
+				$privileged $base $missing </dev/tty || true
 			else
-				$privileged "$pm" $pm_quiet $pkgs
-			fi && printf 'done\n' ||
-				printf '\nCould not install:%s\nInstall them with:\n\n  sudo %s %s%s\n' \
-					"$pkgs" "$pm" "$pm_quiet" "$pkgs"
+				$privileged $base $missing || true
+			fi
+
+			# one unknown name aborts the whole list on apt and dnf, so every
+			# program that is still missing is tried on its own afterwards
+			for _t in $tools; do
+				command -v "$_t" >/dev/null 2>&1 && continue
+				_p=$(pkg_for "$_t")
+				if [ "$ask" = 1 ]; then
+					$privileged $base "$_p" </dev/tty >/dev/null 2>&1 || true
+				else
+					$privileged $base "$_p" >/dev/null 2>&1 || true
+				fi
+			done
+		fi
+	fi
+
+	# yt-dlp is the one download that is a single self-contained file, so it can
+	# be had even where no package carries it. it is built against glibc, so it
+	# is no use on the two systems that build everything against musl
+	if ! command -v yt-dlp >/dev/null 2>&1 && [ ! -x "$dest/yt-dlp" ] &&
+		command -v curl >/dev/null 2>&1; then
+		case "$(uname -s 2>/dev/null)" in
+			Darwin) _yb=yt-dlp_macos ;;
+			Linux)
+				case "$pm" in apk | termux) _yb="" ;; *) _yb=yt-dlp ;; esac
+				;;
+			*) _yb="" ;;
+		esac
+		if [ -n "$_yb" ]; then
+			printf 'fetching yt-dlp (stand-alone build)\n'
+			if curl -fsSL "https://github.com/yt-dlp/yt-dlp/releases/latest/download/$_yb" \
+				-o "$dest/yt-dlp" 2>/dev/null; then
+				chmod +x "$dest/yt-dlp"
+			else
+				rm -f "$dest/yt-dlp"
+			fi
 		fi
 	fi
 fi
 
-printf 'start it with: _nime\n'
+# what is still not there, with the exact command that would fix it. a program
+# that landed in the destination counts too: $dest may just not be on the PATH
+# of this shell yet
+left=""
+for _t in $tools; do
+	command -v "$_t" >/dev/null 2>&1 && continue
+	[ -x "$dest/$_t" ] && continue
+	left="$left $_t"
+done
+
+if [ -n "$left" ]; then
+	printf '\nStill missing:%s\n' "$left"
+	case "$pm" in
+		dnf)
+			printf '\nmpv and the full ffmpeg live in RPM Fusion on older Fedora:\n\n'
+			printf '  sudo dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %%fedora).noarch.rpm\n'
+			printf '  sudo dnf install mpv ffmpeg --allowerasing\n'
+			;;
+		"")
+			printf '\nInstall them with your system packages, then run _nime again.\n'
+			;;
+		*)
+			[ "$missing_howto" = yes ] || printf '\nInstall them with your package manager, then run _nime again.\n'
+			;;
+	esac
+	printf '\nWithout fzf the menus are numbered prompts, without mpv the stream URL\nis printed instead of played, and without yt-dlp the downloads are skipped.\n'
+fi
+
+if [ -x "$dest/_nime" ]; then
+	printf '\n'
+	# stdin belongs to this script when it arrived through a pipe, and the check
+	# must not read the rest of it away
+	"$dest/_nime" --check-deps </dev/null 2>/dev/null || true
+fi
+
+printf '\nstart it with: _nime\n'

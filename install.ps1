@@ -112,15 +112,24 @@ if ($userPath -notlike "*$binDir*") {
 }
 
 Write-Host ''
-if (Test-Path (Join-Path $binDir '_nime')) {
-    Write-Host 'done.' -ForegroundColor Green
-    Write-Host ''
-    Write-Host 'Open a new terminal so the PATH changes apply, then:'
-    Write-Host '  nime cyberpunk' -ForegroundColor Cyan
-    Write-Host '  nime -d -e 1 cyberpunk' -ForegroundColor Cyan
-    Write-Host ''
-    Write-Host "Downloads land in $env:USERPROFILE\Downloads\_nime downloads\<series>\."
-} else {
+if (-not (Test-Path (Join-Path $binDir '_nime'))) {
     Write-Host "_nime was not written to $binDir" -ForegroundColor Yellow
     exit 1
 }
+# what bash can find decides what _nime can do, so say it plainly instead of
+# leaving the first run to find out
+Write-Step 'checking what _nime can use'
+# handed to bash as a file, the way the launcher runs it: a file downloaded from
+# the web has no execute bit, and -c rather than -lc so the PATH that was just
+# rebuilt is the one that is searched
+try { & $bash (Join-Path $binDir '_nime') '--check-deps' } catch { }
+
+Write-Host ''
+Write-Host 'done.' -ForegroundColor Green
+Write-Host ''
+Write-Host 'Open a new terminal so the PATH changes apply, then:'
+Write-Host '  nime cyberpunk' -ForegroundColor Cyan
+Write-Host '  nime -d -e 1 cyberpunk' -ForegroundColor Cyan
+Write-Host ''
+Write-Host "Downloads land in $env:USERPROFILE\Downloads\_nime downloads\<series>\."
+Write-Host 'python3 is only used on Linux and macOS to keep one player window; Windows needs no such thing.' -ForegroundColor DarkGray

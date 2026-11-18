@@ -11,7 +11,10 @@ account, no config, no daemon.
 
 One line, whichever system you are on. It installs `_nime` **and** the programs it
 uses — the menu (`fzf`), the player (`mpv`), downloads (`yt-dlp`, `ffmpeg`) — through
-your own package manager, asking for a password only if it has to.
+your own package manager, asking for a password only if it has to. It finishes by
+printing a check of what is in place, so nothing has to be guessed afterwards.
+
+No `curl`? `wget -qO- https://raw.githubusercontent.com/optimalguyy/_nime/master/install.sh | sh`
 
 **Linux, macOS, Termux**
 
@@ -89,8 +92,19 @@ apt install curl openssl mpv fzf python3 yt-dlp ffmpeg
 **Fedora**
 
 ```sh
-dnf install curl openssl mpv fzf python3 yt-dlp ffmpeg
+dnf install curl openssl python3 fzf yt-dlp ffmpeg-free
 ```
+
+`mpv` and the full `ffmpeg` live in [RPM Fusion](https://rpmfusion.org) on Fedora
+older than 40:
+
+```sh
+dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+dnf install mpv ffmpeg --allowerasing
+```
+
+The installer above does this much for you and tells you exactly what is left if
+a repository is missing.
 
 **openSUSE**
 

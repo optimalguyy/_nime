@@ -1,19 +1,25 @@
 # Maintainer: optimalguyy <https://github.com/optimalguyy>
 pkgname=_nime
-pkgver=1.9.0
+pkgver=1.9.1
 pkgrel=1
 pkgdesc="Terminal client for watching anime"
 arch=('any')
 url="https://github.com/optimalguyy/_nime"
 license=('GPL3')
-depends=('curl' 'openssl')
+# everything a fresh install needs to search, play and download, so the package
+# is usable the moment pacman finishes with no extra steps
+depends=(
+	'curl'
+	'openssl'
+	'fzf'
+	'mpv'
+	'python'
+	'yt-dlp'
+	'ffmpeg'
+)
 optdepends=(
-	'mpv: play episodes'
-	'fzf: fuzzy menus'
-	'python3: keep one player window'
-	'yt-dlp: downloading'
-	'ffmpeg: downloading'
 	'vlc: alternative player'
+	'syncplay: --syncplay'
 )
 source=('_nime' '_nime-dl' '_nime.1' 'LICENSE')
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
