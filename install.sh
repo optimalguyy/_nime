@@ -285,8 +285,8 @@ if [ -n "$left" ]; then
 		termux)
 			# the player on Android is an app, not the package of the same name
 			printf '\nOn Android the player is an app, which pkg cannot install. VLC is the\n'
-			printf 'one that plays these streams:\n'
-			printf '  https://www.videolan.org/vlc/download-android.html\n'
+			printf 'one that plays these streams, from the Play Store:\n'
+			printf '  https://play.google.com/store/apps/details?id=org.videolan.vlc\n'
 			;;
 		dnf)
 			printf '\nmpv and the full ffmpeg live in RPM Fusion on older Fedora:\n\n'
@@ -316,7 +316,8 @@ case "$pm" in
 		# player is an app: the command line mpv pkg installs is not what Android
 		# hands a stream to
 		printf '\nOn Android, termux-setup-storage gives _nime the shared Downloads folder.\n'
-		printf 'The player is an app: VLC. https://www.videolan.org/vlc/download-android.html\n'
+		printf 'The player is an app: VLC, from the Play Store.\n'
+		printf 'https://play.google.com/store/apps/details?id=org.videolan.vlc\n'
 		;;
 esac
 

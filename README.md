@@ -153,8 +153,9 @@ are; a phone's gallery or stock video player does not, and answers with
 # from F-Droid, Play Store or https://www.videolan.org/vlc/download-android.html
 ```
 
-If VLC is not installed, `_nime` **opens the Play Store page for it** and tells
-you the one command to run afterwards:
+If VLC is installed, the episode goes straight into VLC. If it is not, `_nime`
+**opens the Google Play page for it** (named by package, so another store cannot
+take the link) and tells you the one command to run afterwards:
 
 ```sh
 _nime -c -S 1     # the episode you were on, straight into VLC
@@ -174,8 +175,11 @@ downloads land in the Termux home.
 apk add git curl openssl
 ```
 
-There is no player inside iSH, so `_nime` prints a tappable `vlc://` link —
-install VLC from the App Store and tap it.
+There is no player inside iSH, so `_nime` opens the stream in **VLC for iOS** when
+it can, and otherwise prints two tappable links: the App Store page for VLC and
+the `vlc://` link that plays the episode once it is installed.
+[VLC for iOS](https://apps.apple.com/app/vlc-for-mobile/id650377962) is the
+player to have there.
 
 ### Doing it by hand
 

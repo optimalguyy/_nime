@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.9"
+version="1.9.10"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1522,28 +1522,46 @@ need_am() {
 # that the user includes in mpv.conf
 # android_app is.xyz.mpv -> the app is installed, so an intent for it will land
 android_app() {
-	pm list packages 2>/dev/null | grep -q "^package:$1$"
+	# /system/bin is not on the path inside Termux, so pm is looked for there when
+	# it is not found by name; without that every check said the app was missing
+	_pm=$(command -v pm 2>/dev/null) || _pm=/system/bin/pm
+	[ -x "$_pm" ] || return 1
+	"$_pm" list packages 2>/dev/null | grep -q "^package:$1$"
 }
 
-# android_store -> the Play Store page for VLC is open, or its web page when the
-# device has no store (an F-Droid only install, for one)
+# android_store -> the Google Play page for VLC is open
+# every step names com.android.vending, so an alternative store that answers the
+# market:// link cannot take it instead
 android_store() {
 	for _s in "market://details?id=org.videolan.vlc" \
-		"https://play.google.com/store/apps/details?id=org.videolan.vlc" \
-		"https://f-droid.org/packages/org.videolan.vlc/"; do
-		_out=$(am start --user 0 -a android.intent.action.VIEW -d "$_s" 2>&1)
+		"https://play.google.com/store/apps/details?id=org.videolan.vlc"; do
+		_out=$(am start --user 0 -a android.intent.action.VIEW -d "$_s" \
+			-p com.android.vending 2>&1)
 		case "$_out" in
 			*"Error"* | *"Exception"* | *"not found"*) continue ;;
 		esac
 		return 0
 	done
-	return 1
+	# no Play Store on the device: the page in a browser, so it can still be got
+	_out=$(am start --user 0 -a android.intent.action.VIEW \
+		-d "https://play.google.com/store/apps/details?id=org.videolan.vlc" 2>&1)
+	case "$_out" in
+		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
+	esac
+	return 0
 }
 
+# android_play_vlc -> VLC has the episode
+# the app is asked to open the file rather than looked up in a list: that is the
+# same question, and it cannot be answered wrong by a missing pm
 android_play_vlc() {
-	nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
+	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
 		-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
-		-e "title" "$anime_title $ep_label" >/dev/null 2>&1 &
+		-e "title" "$anime_title $ep_label" 2>&1)
+	case "$_out" in
+		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
+	esac
+	return 0
 }
 
 android_mpv() {
@@ -1553,16 +1571,14 @@ android_mpv() {
 		printf '\n%s\n' "$video_link"
 		return 1
 	fi
-	if android_app org.videolan.vlc; then
-		android_play_vlc
+	# VLC gets the episode straight away when it is installed; only a failure to
+	# open it counts as missing
+	if android_play_vlc; then
 		return 0
 	fi
-	# VLC is the one that plays these streams, so a phone without it gets the
-	# store page, and the continue command for after: that run finds VLC and
-	# starts the episode straight away, with nothing to search again
-	warn "VLC is what plays these streams, and it is not installed"
+	warn "VLC is what plays these streams, and it did not open"
 	if android_store; then
-		warn "Install it from the store, then run: _nime -c -S 1"
+		warn "Install it from the Play Store, then run: _nime -c -S 1"
 	else
 		warn "Get it from https://www.videolan.org/vlc/download-android.html"
 		warn "then run: _nime -c -S 1"
@@ -1668,7 +1684,15 @@ play_episode() {
 			fi
 			;;
 		iSH)
-			printf '\033]8;;vlc://%s\a~~~~~~~~~~~~~~~~~~~~\n~ Tap to open VLC ~\n~~~~~~~~~~~~~~~~~~~~\033]8;;\a\n' "$video_link"
+			# iOS cannot be asked from a shell whether VLC is installed, so VLC is
+			# simply asked to open the stream; when it does not, both taps are
+			# printed: the App Store for VLC and the link to play
+			if command -v open >/dev/null 2>&1 && open "vlc://$video_link" >/dev/null 2>&1; then
+				info "Opening VLC"
+			else
+				printf '\033]8;;vlc://%s\a~~~~~~~~~~~~~~~\n~ Tap to play ~\n~~~~~~~~~~~~~~~\033]8;;\a\n' "$video_link"
+				printf '\033]8;;https://apps.apple.com/app/vlc-for-mobile/id650377962\a~~~ No VLC? Tap for it in the App Store ~~~\033]8;;\a\n'
+			fi
 			sleep 5
 			;;
 		*)
