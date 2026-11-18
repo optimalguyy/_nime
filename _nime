@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.3"
+version="1.9.4"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -191,7 +191,9 @@ os_id=$(detect_os)
 # the openssl command has to work, not merely exist: on Termux the package named
 # openssl is the library, the command line tool is a separate package
 openssl_ok() {
-	printf 'aGVsbG8=' | openssl base64 -d 2>/dev/null | grep -q 'hello'
+	# the same decoding the stream payload goes through, so a working command is
+	# one that decodes, not merely one that exists
+	printf 'aGVsbG8=' | openssl base64 -d -A 2>/dev/null | grep -q 'hello'
 }
 
 check_deps() {
