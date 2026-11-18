@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.17"
+version="1.9.18"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1145,7 +1145,7 @@ resolve_episode() {
 		if [ -n "$_sub_embed" ]; then
 			_sub_file=$(file_of_embed "$_sub_embed")
 			if [ -n "$_sub_file" ] && [ "$(media_key "$_sub_file")" = "$(media_key "$_m3u8")" ]; then
-				warn "No dub file here: the source hands back the original audio"
+				info "This source has no dub for $(ep_display "$2"): it serves the original audio"
 				return 1
 			fi
 		fi
@@ -1269,8 +1269,9 @@ resolve_episode_any() {
 		anime_id=$_id
 		episode_maps=$(provider_episode_maps "$_id")
 		if [ -n "$episode_maps" ]; then
-			info "No stream there, trying the other source..."
+			info "Trying the other source..."
 			resolve_episode "$anime_id" "$_ep" && {
+				[ "$mode" = dub ] && info "Got the English dub from the other source"
 				return 0
 			}
 		fi

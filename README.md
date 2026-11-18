@@ -319,7 +319,9 @@ still counts as the same file), treats a match as no dub and tries the other
 source instead:
 
 ```
-No dub file here: the source hands back the original audio
+This source has no dub for Episode 1: it serves the original audio
+Trying the other source...
+Got the English dub from the other source
 ```
 
 There is no quiet switch to the original audio: asking for the dub and getting
