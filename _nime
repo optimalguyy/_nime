@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.7"
+version="1.9.8"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -235,7 +235,7 @@ check_deps() {
 		elif android_app is.xyz.mpv; then
 			printf '  the mpv app is installed and opens the stream\n'
 		else
-			printf '  no player app, the stream opens in the browser\n'
+			printf '  no player app, the Play Store opens for VLC first\n'
 		fi
 	fi
 }
@@ -1537,6 +1537,33 @@ android_web() {
 	return 0
 }
 
+# android_store -> the Play Store page for VLC is open, or its web page when the
+# device has no store (an F-Droid only install, for one)
+android_store() {
+	for _s in "market://details?id=org.videolan.vlc" \
+		"https://play.google.com/store/apps/details?id=org.videolan.vlc" \
+		"https://f-droid.org/packages/org.videolan.vlc/"; do
+		_out=$(am start --user 0 -a android.intent.action.VIEW -d "$_s" 2>&1)
+		case "$_out" in
+			*"Error"* | *"Exception"* | *"not found"*) continue ;;
+		esac
+		return 0
+	done
+	return 1
+}
+
+android_play_vlc() {
+	nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
+		-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
+		-e "title" "$anime_title $ep_label" >/dev/null 2>&1 &
+}
+
+android_play_mpv() {
+	nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
+		-n is.xyz.mpv/.MPVActivity -e "title" "$anime_title $ep_label" \
+		$player_extra_flags >/dev/null 2>&1 &
+}
+
 android_mpv() {
 	_conf_dir="/storage/emulated/0/mpv"
 	if [ -w "${_conf_dir%/mpv}" ]; then
@@ -1549,19 +1576,36 @@ android_mpv() {
 		printf '%s\n' "$video_link"
 		return 1
 	fi
-	# an intent for an app that is not there fails silently, so the app is looked
-	# up first. VLC leads: it plays these streams as they are, which the mpv app
-	# does too, and it is the one that is easy to recommend on Android
+	# VLC leads: it plays these streams as they are, so it is asked for once and
+	# the episode starts by itself as soon as the app is on the phone, with no
+	# second command to type
 	if android_app org.videolan.vlc; then
-		nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
-			-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
-			-e "title" "$anime_title $ep_label" >/dev/null 2>&1 &
+		android_play_vlc
 		return 0
 	fi
+	warn "VLC is what plays these streams, and it is not installed"
+	if android_store; then
+		warn "Install it there, then come back: the episode starts on its own"
+	else
+		warn "No store found, get it from https://www.videolan.org/vlc/download-android.html"
+	fi
+	printf 'waiting for VLC, up to five minutes: the episode starts by itself\n'
+	# two seconds apart, five minutes in all; the loop also covers the wait spent
+	# inside the store, since Termux is only paused while it is in the background
+	_wait=0
+	while [ "$_wait" -lt "${_NIME_VLC_WAIT:-150}" ]; do
+		sleep 2
+		_wait=$((_wait + 1))
+		android_app org.videolan.vlc && break
+	done
+	if android_app org.videolan.vlc; then
+		info "VLC is there, playing $ep_label"
+		android_play_vlc
+		return 0
+	fi
+	warn "VLC did not appear, so whatever else this phone has is used"
 	if android_app is.xyz.mpv; then
-		nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
-			-n is.xyz.mpv/.MPVActivity -e "title" "$anime_title $ep_label" \
-			$player_extra_flags >/dev/null 2>&1 &
+		android_play_mpv
 		return 0
 	fi
 	# neither app is installed, so the web gets it: a browser is opened with the
