@@ -312,6 +312,15 @@ the dub, `_nime` says so and names what it would take:
 No sources found for episode 3: no English dub for it (the dub may not be out yet; --sub plays the original audio)
 ```
 
+A source with no dub for an episode can still answer the dubbed URL, handing the
+original file straight back. `_nime` resolves the subbed stream of the same
+episode and compares it, so the same file for both is treated as no dub and the
+other source is tried instead:
+
+```
+No dub file here: the source hands back the original audio
+```
+
 There is no quiet switch to the original audio: asking for the dub and getting
 Japanese is not a thing `_nime` does, not even when no source has the dub of the
 show at all. Add `--sub` to ask for subs from the start.

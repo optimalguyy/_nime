@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.15"
+version="1.9.16"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1054,18 +1054,10 @@ pick_sub() {
 }
 
 # resolve_episode <id> <ep> : sets video_link, sub_link, links, refr and the skip marks
-resolve_episode() {
-	_embed=$(provider_embed "$2") || return 1
-	[ -z "$_embed" ] && return 1
-	refr="https://megaplay.buzz/"
-	intro_start=0
-	intro_end=0
-	outro_start=0
-	outro_end=0
-
-	info "Resolving $(ep_display "$2")..."
-	# the player only answers to its own host as referer; the source pages are
-	# not accepted and quietly hand back an error page without a file id
+# the player only answers to its own host as referer; the source pages are not
+# accepted and quietly hand back an error page without a file id
+load_embed() {
+	_embed=$1
 	_embed_ref=$(printf '%s' "$_embed" | sed -E 's|^(https?://[^/]+).*|\1|')
 	_page=$(http_get "$_embed" "$_embed_ref") || return 1
 	_file_id=$(printf '%s' "$_page" | grep -oE 'data-id="[0-9]+"' | head -n 1 | grep -oE '[0-9]+')
@@ -1098,10 +1090,57 @@ resolve_episode() {
 	else
 		_json="$_plain"
 	fi
+	return 0
+}
+
+# the episode as it would be played with the original audio, to tell a real dub
+# from a source that just hands the same file back under the dub url
+sub_embed_for() {
+	_saved_mode=$mode
+	mode=sub
+	_out=$(provider_embed "$1")
+	mode=$_saved_mode
+	printf '%s' "$_out"
+}
+
+file_of_embed() {
+	_kept_json=$_json
+	if ! load_embed "$1" 2>/dev/null; then
+		_json=$_kept_json
+		return 1
+	fi
+	printf '%s' "$(printf '%s' "$_json" | unescape | grep -oE 'https://[^"]*\.m3u8[^"]*' | head -n 1)"
+	_json=$_kept_json
+}
+
+resolve_episode() {
+	_embed=$(provider_embed "$2") || return 1
+	[ -z "$_embed" ] && return 1
+	refr="https://megaplay.buzz/"
+	intro_start=0
+	intro_end=0
+	outro_start=0
+	outro_end=0
+
+	info "Resolving $(ep_display "$2")..."
+	load_embed "$_embed" || return 1
 
 	_m3u8=$(printf '%s' "$_json" | unescape | grep -oE 'https://[^"]*\.m3u8[^"]*' | head -n 1)
 	[ -z "$_m3u8" ] && _m3u8=$(printf '%s' "$_plain" | grep -oE 'https://[^"]*\.m3u8[^"]*' | head -n 1)
 	[ -z "$_m3u8" ] && return 1
+
+	# a source without a dub for the episode still answers the dub url: it hands
+	# the subbed file back, so the same file for both means this is not a dub
+	if [ "$mode" = dub ]; then
+		_sub_embed=$(sub_embed_for "$2")
+		if [ -n "$_sub_embed" ]; then
+			_sub_file=$(file_of_embed "$_sub_embed")
+			if [ -n "$_sub_file" ] && [ "$_sub_file" = "$_m3u8" ]; then
+				warn "No dub file here: the source hands back the original audio"
+				return 1
+			fi
+		fi
+	fi
 
 	# skip marks: the player hands us the intro and outro ranges
 	_intro_obj=$(printf '%s' "$_plain" | grep -oE '"intro":\{[^}]*\}' | head -n 1)
