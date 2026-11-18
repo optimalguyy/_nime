@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.4"
+version="1.9.5"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -228,6 +228,16 @@ check_deps() {
 		print) printf 'player:\n  none found, the stream url will be printed\n' ;;
 		*) printf 'player:\n  %s\n' "$player_function" ;;
 	esac
+	# which app actually receives the stream, not just how it is sent
+	if [ "$player_function" = android_mpv ]; then
+		if android_app is.xyz.mpv; then
+			printf '  the mpv app is installed\n'
+		elif android_app org.videolan.vlc; then
+			printf '  no mpv app, the VLC app is used\n'
+		else
+			printf '  no player app, the phone picks (its gallery or what it has)\n'
+		fi
+	fi
 }
 
 # ---------------------------------------------------------------------------
@@ -1515,6 +1525,17 @@ android_app() {
 	pm list packages 2>/dev/null | grep -q "^package:$1$"
 }
 
+# android_view <url> <mime> -> some app on the phone accepted the stream
+# no component is named, so Android shows what it has: its own gallery, a video
+# player, anything that claims the type
+android_view() {
+	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$1" -t "$2" 2>&1)
+	case "$_out" in
+		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
+	esac
+	return 0
+}
+
 android_mpv() {
 	_conf_dir="/storage/emulated/0/mpv"
 	if [ -w "${_conf_dir%/mpv}" ]; then
@@ -1541,9 +1562,23 @@ android_mpv() {
 			-e "title" "$anime_title $ep_label" >/dev/null 2>&1 &
 		return 0
 	fi
-	warn "No player app on this phone, so the stream url is printed instead"
+	# nothing that plays streams is installed, so the phone's own players get a
+	# turn: its gallery or video app if it lists the type, and the stream url is
+	# only printed when no app wants it at all
+	for _mime in "video/*" "application/x-mpegURL" "application/vnd.apple.mpegurl"; do
+		if android_view "$video_link" "$_mime"; then
+			return 0
+		fi
+	done
+	warn "No app on this phone wanted the stream, so the url is printed instead"
 	warn "Install mpv from F-Droid: https://f-droid.org/packages/is.xyz.mpv/"
 	printf '%s\n' "$video_link"
+	# nothing is playing, so the episode menu must not jump ahead before the link
+	# has been read
+	if [ -t 0 ]; then
+		printf 'Press enter when done with it '
+		read -r _ignored
+	fi
 	return 1
 }
 

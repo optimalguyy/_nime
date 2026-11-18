@@ -147,7 +147,10 @@ it that way.
 
 Install the mpv **app** from F-Droid as well: Android hands the stream to it, the
 command line `mpv` that `pkg` installs is not what plays it.
-VLC works too, with `_nime -v`.
+VLC works too, with `_nime -v`. With neither app installed the stream is offered
+to whatever the phone opens for video — its own gallery or player — and the url
+is printed only when nothing takes it. `_nime --check-deps` says which of the
+three will happen.
 
 `termux-setup-storage` gives `_nime` the shared `Downloads` folder; without it
 downloads land in the Termux home.
