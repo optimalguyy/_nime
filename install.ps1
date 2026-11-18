@@ -28,10 +28,11 @@ $packages = @(
 function Write-Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
 
 function Find-Bash {
-    foreach ($c in @(
-            (Join-Path $env:ProgramFiles 'Git\bin\bash.exe'),
-            (Join-Path $env:LOCALAPPDATA 'Programs\Git\bin\bash.exe'))) {
-        if (Test-Path $c) { return $c }
+    foreach ($root in @($env:ProgramFiles, $env:LOCALAPPDATA) | Where-Object { $_ }) {
+        foreach ($sub in @('Git\bin\bash.exe', 'Programs\Git\bin\bash.exe')) {
+            $candidate = Join-Path $root $sub
+            if (Test-Path $candidate) { return $candidate }
+        }
     }
     $found = Get-Command bash.exe -ErrorAction SilentlyContinue
     if ($found) { return $found.Source }
