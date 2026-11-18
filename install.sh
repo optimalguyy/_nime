@@ -136,6 +136,8 @@ pkg_for() {
 	case "$pm:$1" in
 		termux:python3) printf 'python' ;;
 		termux:yt-dlp) printf 'python-yt-dlp' ;;
+		# the package called openssl holds the library, the command is a second one
+		termux:openssl) printf 'openssl-tool' ;;
 		pacman:python3) printf 'python' ;;
 		brew:python3) printf 'python' ;;
 		brew:openssl) printf 'openssl@3' ;;
@@ -205,6 +207,14 @@ else
 			printf '\nInstalling these needs a password, run:\n\n  sudo %s%s\n' "$base" "$missing"
 			missing_howto="yes"
 		else
+			# a package run that was killed half way leaves dpkg waiting to finish
+			# it, and until it does every install fails with "dpkg was interrupted"
+			if [ "$pm" = termux ] && command -v dpkg >/dev/null 2>&1; then
+				if dpkg --audit 2>/dev/null | grep -q .; then
+					printf 'finishing an interrupted package run first\n'
+					dpkg --configure -a >/dev/null 2>&1 || true
+				fi
+			fi
 			printf 'installing:%s (%s)\n' "$missing" "$pm"
 			[ "$pm" = apt ] && { $privileged apt-get update -qq || true; }
 			if [ "$ask" = 1 ]; then
@@ -235,7 +245,15 @@ else
 		case "$(uname -s 2>/dev/null)" in
 			Darwin) _yb=yt-dlp_macos ;;
 			Linux)
-				case "$pm" in apk | termux) _yb="" ;; *) _yb=yt-dlp ;; esac
+				# plain yt-dlp is a python zipapp and runs anywhere python3 does;
+				# yt-dlp_linux is built against glibc, no use on Alpine or Android
+				if command -v python3 >/dev/null 2>&1; then
+					_yb=yt-dlp
+				elif [ "$pm" = apk ] || [ "$pm" = termux ]; then
+					_yb=""
+				else
+					_yb=yt-dlp_linux
+				fi
 				;;
 			*) _yb="" ;;
 		esac

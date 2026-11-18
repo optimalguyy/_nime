@@ -136,8 +136,11 @@ there too; `mpv.exe` on the Windows side is not reachable from inside it.
 **Android, Termux** ([F-Droid](https://f-droid.org/packages/com.termux/))
 
 ```sh
-pkg install curl openssl mpv fzf python python-yt-dlp ffmpeg termux-am
+pkg install curl openssl-tool mpv fzf python python-yt-dlp ffmpeg termux-am
 ```
+
+`openssl-tool` is the one that matters there: the package called `openssl` holds
+only the library, and `_nime` needs the command to decrypt the stream links.
 
 `pkg install` needs no root and no `sudo` on Termux, and the installer above uses
 it that way.
