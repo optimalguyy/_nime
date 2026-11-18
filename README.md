@@ -153,9 +153,15 @@ are; a phone's gallery or stock video player does not, and answers with
 # from F-Droid, Play Store or https://www.videolan.org/vlc/download-android.html
 ```
 
-If VLC is installed, the episode goes straight into VLC. If it is not, `_nime`
-**opens the Google Play page for it** (named by package, so another store cannot
-take the link) and tells you the one command to run afterwards:
+If VLC is installed, the episode goes straight into VLC. These streams answer
+`403` to anything that does not send the site's referrer, and the VLC app takes
+no headers through an intent — so `_nime` writes a small playlist carrying the
+referrer and the user agent, and hands VLC that. It needs `termux-setup-storage`
+once, because only the shared folder can be read by another app.
+
+If VLC is not installed, `_nime` **opens the Google Play page for it** (named by
+package, so another store cannot take the link) and tells you the one command to
+run afterwards:
 
 ```sh
 _nime -c -S 1     # the episode you were on, straight into VLC

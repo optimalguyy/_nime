@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.10"
+version="1.9.11"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -222,6 +222,11 @@ check_deps() {
 			printf 'android:\n  MISSING  am (pkg install termux-am)\n'
 		fi
 		openssl_ok || printf '  MISSING  openssl-tool (pkg install openssl-tool)\n'
+		_shared=""
+		for _d in /storage/emulated/0/Download /storage/emulated/0; do
+			[ -w "$_d" ] && { _shared=1; break; }
+		done
+		[ -z "$_shared" ] && printf '  no shared storage: termux-setup-storage is needed to play\n'
 	fi
 	case "$player_function" in
 		'') printf 'player:\n  none found, the stream url will be printed\n' ;;
@@ -1551,16 +1556,52 @@ android_store() {
 	return 0
 }
 
+# android_vlc_playlist -> a playlist holding the stream and the referrer
+# the streams answer 403 to a request without the referrer, and the VLC app takes
+# no headers through an intent; a playlist it reads does carry them, so that is
+# what it is given
+android_vlc_playlist() {
+	# only a folder the player app can read will do: Termux's own home is not one
+	for _dir in "${_NIME_SHARED_DIR:-}" /storage/emulated/0/Download /storage/emulated/0; do
+		[ -n "$_dir" ] && [ -d "$_dir" ] && [ -w "$_dir" ] && break
+		_dir=""
+	done
+	[ -n "$_dir" ] || return 1
+	_pl="$_dir/_nime.m3u"
+	{
+		printf '#EXTM3U\n'
+		printf '#EXTVLCOPT:http-referrer=%s\n' "$refr"
+		printf '#EXTVLCOPT:http-user-agent=%s\n' "$agent"
+		[ -n "$sub_link" ] && printf '#EXTVLCOPT:sub-file=%s\n' "$sub_link"
+		printf '%s\n' "$video_link"
+	} >"$_pl" 2>/dev/null || return 1
+	[ -s "$_pl" ] || return 1
+	printf '%s' "$_pl"
+}
+
 # android_play_vlc -> VLC has the episode
-# the app is asked to open the file rather than looked up in a list: that is the
-# same question, and it cannot be answered wrong by a missing pm
+# the app is asked to open it rather than looked up in a list: that is the same
+# question, and it cannot be answered wrong by a missing pm
 android_play_vlc() {
+	_pl=$(android_vlc_playlist) && [ -n "$_pl" ] && {
+		_out=$(am start --user 0 -a android.intent.action.VIEW -d "file://$_pl" \
+			-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
+			-e "title" "$anime_title $ep_label" 2>&1)
+		case "$_out" in
+			*"Error"* | *"Exception"* | *"not found"*) : ;;
+			*) return 0 ;;
+		esac
+	}
+	# no shared folder to write the playlist into: the bare link still opens, and
+	# the player is the one that will refuse it if the stream insists on headers
 	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
 		-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
 		-e "title" "$anime_title $ep_label" 2>&1)
 	case "$_out" in
 		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
 	esac
+	warn "Storage is not set up, so the referrer the stream needs could not be sent"
+	warn "Run termux-setup-storage once and try again"
 	return 0
 }
 
