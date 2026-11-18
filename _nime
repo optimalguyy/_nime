@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.9"
+version="1.9.0"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -249,6 +249,25 @@ html_decode() {
 		-e 's|&lt;|<|g' -e 's|&gt;|>|g'
 }
 
+# a search term has to be escaped before it goes into a URL: curl reads a space
+# as a broken address and hands back nothing, which looked like the source not
+# having the show at all. a plus is already how a space is written in a query
+# string, so one is turned back into a space and then into a plus again, and
+# an escaped term can be passed through as often as needed
+urlenc() {
+	printf '%s' "$1" | tr '+' ' ' | LC_ALL=C awk '
+		BEGIN { for (i = 1; i < 256; i++) ch[sprintf("%c", i)] = i }
+		{
+			n = length($0)
+			for (i = 1; i <= n; i++) {
+				c = substr($0, i, 1)
+				if (c ~ /[A-Za-z0-9._~-]/) printf "%s", c
+				else if (c == " ") printf "+"
+				else printf "%%%02X", ch[c]
+			}
+		}'
+}
+
 # ---------------------------------------------------------------------------
 # menu: reads "value<TAB>label" lines, prints the chosen value
 # ---------------------------------------------------------------------------
@@ -300,7 +319,7 @@ ask_query() {
 # ---------------------------------------------------------------------------
 
 as_search() {
-	_page=$(http_get "$base_as/ajax/anime/search?keyword=$1" "" xhr) || return 1
+	_page=$(http_get "$base_as/ajax/anime/search?keyword=$(urlenc "$1")" "" xhr) || return 1
 	[ -z "$_page" ] && return 1
 	printf '%s' "$_page" | unescape | tr '\n' ' ' |
 		sed 's|<a class="item" |\n<a class="item" |g' |
@@ -376,21 +395,26 @@ as_embed() {
 # anichan.to
 # ---------------------------------------------------------------------------
 
+# the suggest endpoint answers with eight titles at most, which left most shows
+# out of the list; the search endpoint behind it returns forty, and carries the
+# year as well, so the oldest-first order costs no extra requests
 ac_search() {
-	_page=$(http_get "$base_ac/api/suggest?q=$1") || return 1
+	_page=$(http_get "$base_ac/api/search?q=$(urlenc "$1")") || return 1
 	[ -z "$_page" ] && return 1
-	printf '%s' "$_page" | tr '{' '\n' |
+	printf '%s' "$_page" | tr -d '\n' | sed 's|": |":|g; s|{"id":|\n{"id":|g' |
 		while IFS= read -r _rec || [ -n "$_rec" ]; do
 			# music videos and things that have not aired are not watchable, and
 			# the search hands them over all the same
 			case "$_rec" in
 				*'"format":"MUSIC"'* | *'"status":"NOT_YET_RELEASED"'*) continue ;;
 			esac
-			_id=$(printf '%s' "$_rec" | sed -nE 's|^"id":([0-9]+).*|\1|p')
+			_id=$(printf '%s' "$_rec" | sed -nE 's|^\{"id":([0-9]+).*|\1|p')
 			[ -z "$_id" ] && continue
-			_name=$(printf '%s' "$_rec" | unescape | sed -nE 's|.*"title":"([^"]*)".*|\1|p')
+			_name=$(printf '%s' "$_rec" | sed -nE 's|.*"title":"([^"]*)".*|\1|p')
 			[ -z "$_name" ] && _name=$_id
-			printf '%s\t%s\n' "$_id" "$(printf '%s' "$_name" | html_decode)"
+			_year=$(printf '%s' "$_rec" |
+				sed -nE 's|.*"startDate":\{"year":([0-9]{4}).*|\1|p')
+			printf '%s\t%s\t%s\n' "$_id" "$(printf '%s' "$_name" | html_decode)" "$_year"
 		done
 }
 
@@ -456,14 +480,31 @@ titles_match() {
 	[ -z "$_b" ] && return 1
 	[ "$_a" = "$_b" ] && return 0
 	awk -v a="$_a" -v b="$_b" 'BEGIN {
-		na = split(a, x, " "); nb = split(b, y, " ")
+		# sources write some titles apart, so "DAN DA DAN" and "Dandadan" are
+		# the same show and have to be recognised as one before the word count
+		fa = a; fb = b
+		gsub(/[^a-z0-9]/, "", fa); gsub(/[^a-z0-9]/, "", fb)
+		if (fa != "" && fa == fb) exit 0
+		# one title wrapped around the other: "Solo Leveling" and "Solo
+		# Leveling Season 2" are the same series, a short word that only looks
+		# like the start of a longer one is not
+		if (length(fa) >= 5 && length(fb) >= 5) {
+			if (index(fb, fa) == 1 || index(fa, fb) == 1) exit 0
+		}
+		na = split(a, x, " ")
+		nb = 0
+		m = split(b, y, " ")
 		hits = 0
-		for (i = 1; i <= na; i++)
-			for (j = 1; j <= nb; j++)
-				if (x[i] != "" && x[i] == y[j]) { hits++; break }
-		short = (na < nb ? na : nb)
-		if (short == 0) exit 1
-		exit (hits / short >= 0.6) ? 0 : 1
+		words = 0
+		for (i = 1; i <= na; i++) {
+			# short words say nothing: "dan" on its own matched half the source
+			if (length(x[i]) < 4) continue
+			words++
+			for (j = 1; j <= m; j++)
+				if (x[i] == y[j]) { hits++; break }
+		}
+		if (words == 0) exit 1
+		exit (hits / words >= 0.8) ? 0 : 1
 	}'
 }
 
@@ -554,36 +595,35 @@ player_stop() {
 	player_running=0
 }
 
-# every result for a query, not just the handful the search box shows.
-# the page lists poster links and titles separately but in the same order,
-# so both are pulled out and zipped back together
+# every result for a query, not just the handful the search box shows. the page
+# writes one card per result with its link, its id and its title, so each card is
+# read on its own: pulled out separately the three lists could drift apart and a
+# card the page wrote differently shifted every title after it onto the wrong
+# slug, which is how a search ended up with rows that led nowhere
 as_search_all() {
 	_p=1
 	while [ "$_p" -le 3 ]; do
-		_page=$(http_get "$base_as/filter?keyword=$1&page=$_p") || return 1
+		_page=$(http_get "$base_as/filter?keyword=$(urlenc "$1")&page=$_p") || return 1
 		[ -z "$_page" ] && break
-		_page=$(printf '%s' "$_page" | unescape)
-		# each card carries its slug and its id in the poster link, so no
-		# extra page has to be fetched per season later on
-		_ids=$(printf '%s' "$_page" | tr '\n' ' ' |
-			grep -oE '<a class="poster[^>]*>' |
-			sed -E 's|.*/anime/([^/"]+)/ep-[^"]*".*|\1|' | awk '!seen[$0]++')
-		[ -z "$_ids" ] && break
-		_numbers=$(printf '%s' "$_page" | tr '\n' ' ' |
-			grep -oE '<a class="poster[^>]*>' |
-			sed -nE 's|.*data-tip="([0-9]+)".*|\1|p')
-		_names=$(printf '%s' "$_page" | tr '\n' ' ' |
-			grep -oE '<div class="name">[^<]*<a [^>]*>[^<]*</a>' |
-			sed -E 's|.*>([^<]*)</a>|\1|' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-		_tmp="${TMPDIR:-/tmp}/_nime_asall.$$"
-		printf '%s\n' "$_ids" >"${_tmp}.s"
-		printf '%s\n' "$_numbers" >"${_tmp}.i"
-		printf '%s\n' "$_names" >"${_tmp}.n"
-		paste "${_tmp}.s" "${_tmp}.i" "${_tmp}.n" | while IFS="$TAB" read -r _sl _no _nm; do
-			[ -z "$_sl" ] && continue
-			printf '%s\t%s\t%s\n' "$_sl" "$(printf '%s' "$_nm" | html_decode)" "$_no"
-		done
-		rm -f "${_tmp}.s" "${_tmp}.i" "${_tmp}.n"
+		_found=$(printf '%s' "$_page" | unescape | tr -d '\r' | tr '\n' ' ' |
+			sed 's|<a class="poster|\n@CARD@|g' |
+			while IFS= read -r _card; do
+				case "$_card" in
+					@CARD@*) ;;
+					*) continue ;;
+				esac
+				_sl=$(printf '%s' "$_card" |
+					sed -nE 's|^@CARD@[^>]*href="[^"]*/anime/([^/"]+).*|\1|p')
+				[ -z "$_sl" ] && continue
+				_no=$(printf '%s' "$_card" | sed -nE 's|.*data-tip="([0-9]+)".*|\1|p')
+				_nm=$(printf '%s' "$_card" |
+					sed -nE 's|.*<div class="name">[^<]*<a [^>]*>([^<]*)</a>.*|\1|p' |
+					sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+				[ -z "$_nm" ] && _nm=$_sl
+				printf '%s\t%s\t%s\n' "$_sl" "$(printf '%s' "$_nm" | html_decode)" "$_no"
+			done)
+		[ -z "$_found" ] && break
+		printf '%s\n' "$_found"
 		_p=$((_p + 1))
 	done
 }
@@ -744,18 +784,33 @@ release_year() {
 }
 
 # only the rows whose title carries a word of the query, so a search does not
-# come back with every entry the source happens to associate with it
+# come back with every entry the source happens to associate with it. the query
+# is also matched with its spacing removed, because the sources write some
+# titles apart: "dandadan" never found "DAN DA DAN" and the show was missing
+# from its own search
 relevant_rows() {
 	awk -F'\t' -v q="$1" '
 		BEGIN {
 			n = split(tolower(q), w, "[-+ ,]")
 			k = 0
 			for (i = 1; i <= n; i++) if (length(w[i]) >= 3) words[++k] = w[i]
+			flatq = tolower(q)
+			gsub(/[^a-z0-9]/, "", flatq)
 		}
 		NF >= 3 {
 			t = tolower($2)
-			hit = (k == 0)
-			for (i = 1; i <= k && !hit; i++) if (index(t, words[i])) hit = 1
+			hit = 0
+			if (k > 0) {
+				for (i = 1; i <= k && !hit; i++) if (index(t, words[i])) hit = 1
+			} else if (length(flatq) < 2) {
+				# a one letter query says nothing, so nothing is ruled out
+				hit = 1
+			}
+			if (!hit && length(flatq) >= 3) {
+				flat = t
+				gsub(/[^a-z0-9]/, "", flat)
+				if (index(flat, flatq)) hit = 1
+			}
 			if (hit) print
 		}'
 }
@@ -765,11 +820,14 @@ relevant_rows() {
 # needs for its own source in field 1 and names that source in field 3
 search_all_sources() {
 	_tmp="${TMPDIR:-/tmp}/_nime_search.$$"
-	( as_search "$1" 2>/dev/null | while IFS="$TAB" read -r _sl _nm; do
+	# the quick search answers with five titles; the filter page behind it has
+	# twenty-eight per page and is what the list is built from, so a search for a
+	# popular show turns up its films and specials too instead of five of them
+	( as_search_all "$1" 2>/dev/null | while IFS="$TAB" read -r _sl _nm _sid; do
 		[ -n "$_sl" ] && printf '%s\t%s\tanimesuge\n' "$_sl" "$_nm"
 	done >"${_tmp}.a" ) &
-	( ac_search "$1" 2>/dev/null | while IFS="$TAB" read -r _id _nm; do
-		[ -n "$_id" ] && printf '%s\t%s\tanichan\n' "$_id" "$_nm"
+	( ac_search "$1" 2>/dev/null | while IFS="$TAB" read -r _id _nm _yr; do
+		[ -n "$_id" ] && printf '%s\t%s\tanichan\t%s\n' "$_id" "$_nm" "$_yr"
 	done >"${_tmp}.b" ) &
 	wait
 	_all=$(cat "${_tmp}.a" "${_tmp}.b" 2>/dev/null)
@@ -780,24 +838,46 @@ search_all_sources() {
 	printf '%s\n' "$_pruned" >"${_tmp}.in"
 	# ask for every year at once, then list the oldest series first so the one to
 	# start with sits at the top
+	# a long list means one page fetch per row to date it, so they go ten at a
+	# time rather than all at once; a year the search already gave is used as is
 	_i=0
-	while IFS="$TAB" read -r _id _title _prov; do
+	while IFS="$TAB" read -r _id _title _prov _known; do
 		[ -z "$_id" ] && continue
 		_i=$((_i + 1))
 		(
-			_y=$(release_year "$_prov" "$_id")
+			_y=$_known
+			[ -z "$_y" ] && _y=$(release_year "$_prov" "$_id")
 			printf '%s\t%s\t%s\t%s\t%s\n' "${_y:-9999}" "$_id" "$_title" "$_prov" "$_title" >"${_tmp}.r$_i"
 		) &
+		[ $((_i % 10)) -eq 0 ] && wait
 	done <"${_tmp}.in"
 	wait
-	cat "${_tmp}".r* 2>/dev/null | sort -t"$TAB" -k1,1n -k3,3 |
-		awk -F'\t' 'NF >= 5 {
-			key = tolower($3)
+	# the title the query names comes first and everything else follows, each
+	# group oldest first: with the whole list now here, sorting by year alone put
+	# an unrelated older show above the one that was asked for
+	cat "${_tmp}".r* 2>/dev/null |
+		awk -F'\t' -v q="$1" '
+			BEGIN {
+				f = tolower(q)
+				gsub(/[^a-z0-9]/, "", f)
+			}
+			NF >= 5 {
+				t = tolower($3)
+				gsub(/[^a-z0-9]/, "", t)
+				rank = 3
+				if (f != "" && t == f) rank = 0
+				else if (f != "" && index(t, f) == 1) rank = 1
+				else if (f != "" && index(t, f) > 0) rank = 2
+				printf "%d\t%s\t%s\t%s\t%s\t%s\n", rank, $1, $2, $3, $4, $5
+			}' |
+		sort -t"$TAB" -k1,1n -k2,2n -k5,5 |
+		awk -F'\t' 'NF >= 6 {
+			key = tolower($4)
 			gsub(/[^a-z0-9]/, "", key)
 			if (key == "" || key in seen) next
 			seen[key] = 1
-			label = ($1 == 9999 ? $3 : $3 " (" $1 ")")
-			printf "%s\t%s\t%s\t%s\n", $2, label, $4, $5
+			label = ($2 == 9999 ? $4 : $4 " (" $2 ")")
+			printf "%s\t%s\t%s\t%s\n", $3, label, $5, $6
 		}'
 	rm -f "${_tmp}.a" "${_tmp}.b" "${_tmp}.in" "${_tmp}".r*
 }
@@ -1043,12 +1123,33 @@ resolve_episode_any() {
 
 	for _p in animesuge anichan; do
 		[ "$_p" = "$_saved_provider" ] && continue
-		_row=$(search_all_sources "$(season_query "$(season_base "$anime_title")")" |
-			awk -F"$TAB" -v p="$_p" '$3 == p' | head -n 1)
+		_base=$(season_base "$anime_title")
+		# the title as it is written, and then without its spacing: a source that
+		# has nothing for "dan da dan" still finds "dandadan"
+		_flat=$(printf '%s' "$_base" | LC_ALL=C tr -d '[:punct:] ' | LC_ALL=C tr 'A-Z' 'a-z')
+		_row=""
+		for _q in "$(season_query "$_base")" "$_flat"; do
+			[ -z "$_q" ] && continue
+			# asked straight from the source: in the merged list a title that both
+			# of them carry is kept once, and the copy that is left can belong to
+			# the source that just failed
+			case "$_p" in
+				animesuge) _rows=$(as_search_all "$_q" 2>/dev/null | cut -f 1,2) ;;
+				anichan) _rows=$(ac_search "$_q" 2>/dev/null | cut -f 1,2) ;;
+				esac
+			# every row is checked, not just the first: the opening row for a
+			# query is often a different show altogether
+			_row=$(printf '%s\n' "$_rows" |
+				while IFS="$TAB" read -r _rid _rlabel; do
+					[ -z "$_rid" ] && continue
+					titles_match "$anime_title" "$_rlabel" || continue
+					[ "$(season_no "$anime_title")" = "$(season_no "$_rlabel")" ] || continue
+					printf '%s\t%s\n' "$_rid" "$_rlabel"
+					break
+				done)
+			[ -n "$_row" ] && break
+		done
 		[ -z "$_row" ] && continue
-		_t=$(printf '%s' "$_row" | cut -f 4)
-		titles_match "$anime_title" "$_t" || continue
-		[ "$(season_no "$anime_title")" = "$(season_no "$_t")" ] || continue
 		_id=$(printf '%s' "$_row" | cut -f 1)
 		[ "$_p" = animesuge ] && _id=$(as_anime_id "$_id")
 		[ -z "$_id" ] && continue
