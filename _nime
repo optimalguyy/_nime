@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.8.7"
+version="1.8.8"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -514,6 +514,11 @@ player_running=0
 
 player_ipc_setup() {
 	[ "$player_ipc" = 1 ] && return 0
+	# a windows build of mpv takes a named pipe there, which the client below
+	# cannot open, so windows gets one window per episode
+	case "$(uname -s 2>/dev/null)" in
+		MSYS* | MINGW* | CYGWIN* | Windows*) return 1 ;;
+	esac
 	command -v python3 >/dev/null 2>&1 || return 1
 	player_sock="${TMPDIR:-/tmp}/_nime_player.$$.sock"
 	rm -f "$player_sock"
@@ -1423,6 +1428,10 @@ play_episode() {
 		return
 	fi
 
+	# only hand the player a socket when there is a client that can talk to it
+	_ipc_flag=""
+	[ "$player_ipc" = 1 ] && [ -n "$player_sock" ] && _ipc_flag="--input-ipc-server=$player_sock"
+
 	if [ "$player_function" = download ]; then
 		download_video
 		unset video_link
@@ -1474,10 +1483,10 @@ play_episode() {
 			;;
 		*mpv*)
 			if [ "$no_detach" = 1 ]; then
-				$player_function --input-ipc-server="$player_sock" --referrer="$refr" --alang="$audio_lang" ${sub_link:+--sub-file="$sub_link"} \
+				$player_function $_ipc_flag --referrer="$refr" --alang="$audio_lang" ${sub_link:+--sub-file="$sub_link"} \
 					$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" "$video_link"
 			else
-				nohup $player_function --input-ipc-server="$player_sock" --referrer="$refr" --alang="$audio_lang" ${sub_link:+--sub-file="$sub_link"} \
+				nohup $player_function $_ipc_flag --referrer="$refr" --alang="$audio_lang" ${sub_link:+--sub-file="$sub_link"} \
 					$skip_flag $stream_flags $player_extra_flags --force-media-title="$anime_title $ep_label" \
 					"$video_link" >/dev/null 2>&1 &
 			fi

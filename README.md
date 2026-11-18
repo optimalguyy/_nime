@@ -69,6 +69,38 @@ password only if it has to.
 
 Run it again later to update, or use `_nime -U`.
 
+### Windows
+
+Windows has no `sh`, so the line above cannot work there. Run this in
+**PowerShell** instead:
+
+```powershell
+irm https://raw.githubusercontent.com/optimalguyy/_nime/master/install.ps1 | iex
+```
+
+Nothing has to be installed beforehand. It sets up Git for Windows — the shell
+`_nime` runs in — plus `fzf`, `mpv`, `yt-dlp` and `ffmpeg` through `winget`
+(which Windows 11 and current Windows 10 already have), puts `_nime` and two
+launchers in `%LOCALAPPDATA%\nime\bin`, and adds that folder to your `PATH`.
+
+Open a new terminal once it finishes, then:
+
+```powershell
+nime cyberpunk
+nime -d -e 1 cyberpunk
+```
+
+If PowerShell will not run a downloaded script, save it first and run the file:
+
+```powershell
+iwr https://raw.githubusercontent.com/optimalguyy/_nime/master/install.ps1 -OutFile install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+One difference on Windows: each episode opens its own player window. The
+single-window `next` / `previous` control is a Unix socket, which Windows
+players do not expose.
+
 ### Arch, CachyOS, Manjaro, EndeavourOS
 
 The repository carries a `PKGBUILD`, so pacman can own the files:
