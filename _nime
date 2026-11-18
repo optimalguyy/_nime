@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.12"
+version="1.9.13"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -36,6 +36,15 @@ clear_status() {
 	[ "${status_lines:-0}" -gt 0 ] 2>/dev/null || return 0
 	printf '\33[%dA\33[0J' "$status_lines" >&2
 	status_lines=0
+}
+
+# an episode that cannot be found while asking for the dub is a missing dub, and
+# saying so is more use than "no sources"
+dub_die() {
+	if [ "$mode" = dub ]; then
+		die "$1: no English dub for it (--sub plays the original audio)"
+	fi
+	die "$1!"
 }
 
 die() {
@@ -399,7 +408,15 @@ as_servers() {
 			}
 			cur == want { print }
 		')
-	[ -z "$_group" ] && _group=$(printf '%s' "$_raw" | unescape | tr '\n' ' ')
+	# a page without any markers carries a single group, so that group is all there
+	# is; a page that marks its groups and has no dub one genuinely has no dub here,
+	# and handing the subbed servers over instead was what made episodes play subbed
+	if [ -z "$_group" ]; then
+		case "$_raw" in
+			*data-type=*) : ;;
+			*) _group=$(printf '%s' "$_raw" | unescape | tr '\n' ' ') ;;
+		esac
+	fi
 	printf '%s' "$_group" |
 		sed 's|<div class="server"|\n<div class="server"|g' |
 		while IFS= read -r _rec || [ -n "$_rec" ]; do
@@ -930,7 +947,9 @@ provider_embed() {
 		animesuge)
 			[ -z "$_ids" ] || [ "$_ids" = "-" ] && return 1
 			_servers=$(as_servers "$_ids" "$mode")
-			[ -z "$_servers" ] && _servers=$(as_servers "$_ids" sub)
+			# dub is the point: a missing dub group means this episode has no dub,
+			# not that the subbed one will do
+			[ -z "$_servers" ] && [ "$mode" != dub ] && _servers=$(as_servers "$_ids" sub)
 			[ -z "$_servers" ] && return 1
 			_total=$(printf '%s\n' "$_servers" | grep -c .)
 			_i=1
@@ -1943,7 +1962,7 @@ play() {
 
 	printf '%s\n' "$ep_list" | grep -qx "$_spec" || die "Invalid episode!"
 	ep_no=$_spec
-	resolve_episode_any "$ep_no" || die "No sources found for episode $ep_no!"
+				resolve_episode_any "$ep_no" || dub_die "No sources found for episode $ep_no"
 	play_episode
 }
 
@@ -1997,7 +2016,7 @@ load_episode_maps() {
 		fi
 	fi
 	if [ -z "$episode_maps" ] && [ "$mode" = dub ]; then
-		warn "No site has this one dubbed, using the subbed version"
+		warn "No site has this one in English at all: playing it with the original audio"
 		mode=sub
 		episode_maps=$(provider_episode_maps "$anime_id")
 	fi

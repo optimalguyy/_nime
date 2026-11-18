@@ -303,10 +303,17 @@ Found it dubbed: <title>
 ```
 
 The switch only happens when the title actually matches, so it never lands you
-on a different show. The sources are checked in turn: when one has no dub for a
-show, the other is looked at before falling back to subs. If no source has a
-dub, it says so and plays the subbed version. Add `--sub` to ask for subs from
-the start.
+on a different show. The sources are checked in turn, and an episode is only ever
+played from the dubbed stream: a source that has the show but not the dub of that
+episode is skipped rather than quietly handed over as subbed. When no source has
+the dub, `_nime` says so and names what it would take:
+
+```
+No sources found for episode 3: no English dub for it (--sub plays the original audio)
+```
+
+Only a show with no dub anywhere at all warns and plays the original audio, which
+never happens silently. Add `--sub` to ask for subs from the start.
 
 Each audio language has its own flag: `-engdub`, `-gerdub`, `-spadub`,
 `-fredub`, `-itadub`, `-pordub`, `-rusdub` and `-aradub`. Only English dubs are
