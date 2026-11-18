@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.14"
+version="1.9.15"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -52,7 +52,7 @@ mode_word() {
 # saying so is more use than "no sources"
 dub_die() {
 	if [ "$mode" = dub ]; then
-		die "$1: no English dub for it (--sub plays the original audio)"
+		die "$1: no English dub for it (the dub may not be out yet; --sub plays the original audio)"
 	fi
 	die "$1!"
 }
@@ -2026,10 +2026,10 @@ load_episode_maps() {
 			episode_maps=$(provider_episode_maps "$anime_id")
 		fi
 	fi
+	# a dub was asked for, so a dub is what is played: quietly switching to the
+	# original audio left people hearing Japanese after asking for English
 	if [ -z "$episode_maps" ] && [ "$mode" = dub ]; then
-		warn "No site has this one in English at all: playing it with the original audio"
-		mode=sub
-		episode_maps=$(provider_episode_maps "$anime_id")
+		die "No English dub for $anime_title on either source (--sub plays the original audio)"
 	fi
 	# the site keeps each season as its own entry, so pull them together and
 	# keep every episode of every season in one list

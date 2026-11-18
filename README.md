@@ -309,11 +309,12 @@ episode is skipped rather than quietly handed over as subbed. When no source has
 the dub, `_nime` says so and names what it would take:
 
 ```
-No sources found for episode 3: no English dub for it (--sub plays the original audio)
+No sources found for episode 3: no English dub for it (the dub may not be out yet; --sub plays the original audio)
 ```
 
-Only a show with no dub anywhere at all warns and plays the original audio, which
-never happens silently. Add `--sub` to ask for subs from the start.
+There is no quiet switch to the original audio: asking for the dub and getting
+Japanese is not a thing `_nime` does, not even when no source has the dub of the
+show at all. Add `--sub` to ask for subs from the start.
 
 Each audio language has its own flag: `-engdub`, `-gerdub`, `-spadub`,
 `-fredub`, `-itadub`, `-pordub`, `-rusdub` and `-aradub`. Only English dubs are
