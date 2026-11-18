@@ -316,13 +316,11 @@ A source with no dub for an episode can still answer the dubbed URL, handing the
 original file straight back. `_nime` resolves the subbed stream of the same
 episode and compares the two by media id (so the same file on a different host
 still counts as the same file), treats a match as no dub and tries the other
-source instead:
+source instead, without printing anything about it: the episode simply plays.
 
-```
-This source has no dub for Episode 1: it serves the original audio
-Trying the other source...
-Got the English dub from the other source
-```
+The other source is searched for the same series, not for a show whose title
+happens to start the same way, so a lookup that lands on a different season or a
+different series is refused instead of playing someone else's episodes.
 
 There is no quiet switch to the original audio: asking for the dub and getting
 Japanese is not a thing `_nime` does, not even when no source has the dub of the

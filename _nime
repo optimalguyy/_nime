@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.18"
+version="1.9.19"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -591,6 +591,15 @@ season_no() {
 	printf '%s' "${_n:-1}"
 }
 
+# the same show, not just a show whose title starts the same way: the fallback
+# source is searched by title, and a loose match there played a different series
+# ("Cyberpunk: Edgerunners 2" answered a lookup for the first one)
+same_series() {
+	_a=$(season_base "$1" | tr -d ' ')
+	_b=$(season_base "$2" | tr -d ' ')
+	[ -n "$_a" ] && [ "$_a" = "$_b" ]
+}
+
 # a search term the sites accept: plain ascii words joined with plus. one of
 # them answers 400 to anything else, which silently kills a lookup
 season_query() {
@@ -1145,7 +1154,6 @@ resolve_episode() {
 		if [ -n "$_sub_embed" ]; then
 			_sub_file=$(file_of_embed "$_sub_embed")
 			if [ -n "$_sub_file" ] && [ "$(media_key "$_sub_file")" = "$(media_key "$_m3u8")" ]; then
-				info "This source has no dub for $(ep_display "$2"): it serves the original audio"
 				return 1
 			fi
 		fi
@@ -1253,7 +1261,7 @@ resolve_episode_any() {
 			_row=$(printf '%s\n' "$_rows" |
 				while IFS="$TAB" read -r _rid _rlabel; do
 					[ -z "$_rid" ] && continue
-					titles_match "$anime_title" "$_rlabel" || continue
+					same_series "$anime_title" "$_rlabel" || continue
 					[ "$(season_no "$anime_title")" = "$(season_no "$_rlabel")" ] || continue
 					printf '%s\t%s\n' "$_rid" "$_rlabel"
 					break
@@ -1269,11 +1277,7 @@ resolve_episode_any() {
 		anime_id=$_id
 		episode_maps=$(provider_episode_maps "$_id")
 		if [ -n "$episode_maps" ]; then
-			info "Trying the other source..."
-			resolve_episode "$anime_id" "$_ep" && {
-				[ "$mode" = dub ] && info "Got the English dub from the other source"
-				return 0
-			}
+			resolve_episode "$anime_id" "$_ep" && return 0
 		fi
 		provider=$_saved_provider
 		anime_id=$_saved_id
