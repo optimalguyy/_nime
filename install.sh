@@ -58,13 +58,41 @@ fi
 
 printf 'installed in %s\n' "$dest"
 
+# the shell has to find it afterwards, so the directory goes on the PATH here
+# rather than in a line to copy by hand: Termux and a fresh home put nothing in
+# ~/.local/bin, and `_nime` was simply "command not found" after installing
+path_rc=""
 case ":${PATH}:" in
 	*":${dest}:"*) ;;
 	*)
-		printf '\n%s is not on your PATH yet, add it once:\n\n' "$dest"
-		printf '  bash:  echo '\''export PATH="%s:$PATH"'\'' >> ~/.bashrc\n' "$dest"
-		printf '  zsh:   echo '\''export PATH="%s:$PATH"'\'' >> ~/.zshrc\n' "$dest"
-		printf '  fish:  fish_add_path %s\n\n' "$dest"
+		case "$(basename "${SHELL:-sh}" 2>/dev/null)" in
+			fish)
+				path_rc="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
+				mkdir -p "$(dirname "$path_rc")" 2>/dev/null
+				if ! grep -qF "fish_add_path $dest" "$path_rc" 2>/dev/null; then
+					printf '\nfish_add_path %s\n' "$dest" >>"$path_rc"
+				fi
+				;;
+			zsh)
+				# zsh reads neither .profile nor .bashrc
+				if ! grep -qF "$dest" "$HOME/.zshrc" 2>/dev/null; then
+					printf '\nexport PATH="%s:$PATH"\n' "$dest" >>"$HOME/.zshrc"
+				fi
+				path_rc="$HOME/.zshrc"
+				;;
+			*)
+				# .profile for login shells, .bashrc for the terminal that is open
+				# now: bash reads the second, plain sh the first
+				for _rc in "$HOME/.profile" "$HOME/.bashrc"; do
+					grep -qF "$dest" "$_rc" 2>/dev/null && continue
+					{
+						[ -f "$_rc" ] || printf '# created by the _nime installer\n'
+						printf '\nexport PATH="%s:$PATH"\n' "$dest"
+					} >>"$_rc" 2>/dev/null
+					path_rc="${path_rc:-$_rc}"
+				done
+				;;
+		esac
 		;;
 esac
 
@@ -139,7 +167,11 @@ else
 		# shellcheck disable=SC2086
 		brew install $missing || true
 	else
-		if [ "$(id -u)" = 0 ]; then
+		# pkg in Termux installs into the app's own prefix as the app user: it
+		# needs no root and there is no sudo to give it
+		if [ "$pm" = termux ]; then
+			privileged=""
+		elif [ "$(id -u)" = 0 ]; then
 			privileged=""
 		elif command -v sudo >/dev/null 2>&1; then
 			privileged="sudo"
@@ -150,7 +182,7 @@ else
 		# `curl | sh` hands the script to stdin, so sudo has nowhere to ask for
 		# the password unless it is pointed at the terminal
 		ask=0
-		if [ "$privileged" = sudo ] && ! sudo -n true 2>/dev/null; then
+		if [ "$pm" != termux ] && [ "$privileged" = sudo ] && ! sudo -n true 2>/dev/null; then
 			if ( : </dev/tty ) 2>/dev/null; then
 				ask=1
 			else
@@ -168,7 +200,8 @@ else
 			*) base="$pm install -y" ;;
 		esac
 
-		if [ -z "$privileged" ] && [ "$(id -u)" != 0 ]; then
+		# pkg needs no password, so Termux never lands in this branch
+		if [ -z "$privileged" ] && [ "$(id -u)" != 0 ] && [ "$pm" != termux ]; then
 			printf '\nInstalling these needs a password, run:\n\n  sudo %s%s\n' "$base" "$missing"
 			missing_howto="yes"
 		else
@@ -231,6 +264,11 @@ done
 if [ -n "$left" ]; then
 	printf '\nStill missing:%s\n' "$left"
 	case "$pm" in
+		termux)
+			# the player on Android is an app, not the package of the same name
+			printf '\nmpv on Android is the app from F-Droid, which pkg cannot install:\n'
+			printf '  https://f-droid.org/packages/is.xyz.mpv/\n'
+			;;
 		dnf)
 			printf '\nmpv and the full ffmpeg live in RPM Fusion on older Fedora:\n\n'
 			printf '  sudo dnf install https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %%fedora).noarch.rpm\n'
@@ -253,4 +291,20 @@ if [ -x "$dest/_nime" ]; then
 	"$dest/_nime" --check-deps </dev/null 2>/dev/null || true
 fi
 
-printf '\nstart it with: _nime\n'
+case "$pm" in
+	termux)
+		# downloads and the player app both reach into shared storage, and the
+		# player is an app: the command line mpv pkg installs is not what Android
+		# hands a stream to
+		printf '\nOn Android, termux-setup-storage gives _nime the shared Downloads folder.\n'
+		printf 'The player is the mpv app from F-Droid: https://f-droid.org/packages/is.xyz.mpv/\n'
+		;;
+esac
+
+if [ -n "$path_rc" ]; then
+	# said either way: a second run finds the line already there and appends nothing
+	printf '\n%s is on your PATH through %s.\n' "$dest" "$path_rc"
+	printf 'Open a new terminal (or run: . %s), then:\n\n  _nime\n' "$path_rc"
+else
+	printf '\nstart it with: _nime\n'
+fi

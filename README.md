@@ -11,8 +11,10 @@ account, no config, no daemon.
 
 One line, whichever system you are on. It installs `_nime` **and** the programs it
 uses — the menu (`fzf`), the player (`mpv`), downloads (`yt-dlp`, `ffmpeg`) — through
-your own package manager, asking for a password only if it has to. It finishes by
-printing a check of what is in place, so nothing has to be guessed afterwards.
+your own package manager, asking for a password only if it has to. It puts
+`~/.local/bin` on your `PATH` itself (`~/.profile`, `~/.bashrc` or `~/.zshrc`,
+whichever your shell reads) and finishes by printing a check of what is in place,
+so nothing has to be guessed afterwards. Open a new terminal once it is done.
 
 No `curl`? `wget -qO- https://raw.githubusercontent.com/optimalguyy/_nime/master/install.sh | sh`
 
@@ -134,12 +136,18 @@ there too; `mpv.exe` on the Windows side is not reachable from inside it.
 **Android, Termux** ([F-Droid](https://f-droid.org/packages/com.termux/))
 
 ```sh
-pkg install git curl openssl mpv fzf python termux-am
-pkg install yt-dlp ffmpeg      # only needed for downloads
+pkg install curl openssl mpv fzf python python-yt-dlp ffmpeg termux-am
 ```
 
-Install the mpv app from F-Droid as well: `_nime` hands the stream over to it.
+`pkg install` needs no root and no `sudo` on Termux, and the installer above uses
+it that way.
+
+Install the mpv **app** from F-Droid as well: Android hands the stream to it, the
+command line `mpv` that `pkg` installs is not what plays it.
 VLC works too, with `_nime -v`.
+
+`termux-setup-storage` gives `_nime` the shared `Downloads` folder; without it
+downloads land in the Termux home.
 
 **iOS, iSH** (App Store)
 
