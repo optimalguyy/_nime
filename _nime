@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.16"
+version="1.9.17"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1103,6 +1103,15 @@ sub_embed_for() {
 	printf '%s' "$_out"
 }
 
+# the media id inside a stream url: the same episode re-hosted elsewhere keeps
+# its id, so comparing ids catches a dub that is really the original file even
+# when the two urls sit on different hosts
+media_key() {
+	_key=$(printf '%s' "$1" | sed -nE 's|.*/([0-9a-f]{16,})/[^/]+$|\1|p' | head -n 1)
+	[ -z "$_key" ] && _key=$1
+	printf '%s' "$_key"
+}
+
 file_of_embed() {
 	_kept_json=$_json
 	if ! load_embed "$1" 2>/dev/null; then
@@ -1135,7 +1144,7 @@ resolve_episode() {
 		_sub_embed=$(sub_embed_for "$2")
 		if [ -n "$_sub_embed" ]; then
 			_sub_file=$(file_of_embed "$_sub_embed")
-			if [ -n "$_sub_file" ] && [ "$_sub_file" = "$_m3u8" ]; then
+			if [ -n "$_sub_file" ] && [ "$(media_key "$_sub_file")" = "$(media_key "$_m3u8")" ]; then
 				warn "No dub file here: the source hands back the original audio"
 				return 1
 			fi

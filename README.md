@@ -314,8 +314,9 @@ No sources found for episode 3: no English dub for it (the dub may not be out ye
 
 A source with no dub for an episode can still answer the dubbed URL, handing the
 original file straight back. `_nime` resolves the subbed stream of the same
-episode and compares it, so the same file for both is treated as no dub and the
-other source is tried instead:
+episode and compares the two by media id (so the same file on a different host
+still counts as the same file), treats a match as no dub and tries the other
+source instead:
 
 ```
 No dub file here: the source hands back the original audio
