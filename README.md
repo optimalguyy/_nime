@@ -1,26 +1,53 @@
 # `_nime`
 
-`_nime` is a terminal client for watching anime. Search for a show, pick an
-episode from a list, and it resolves the stream and hands it to your player.
-It reads the sources it is built around, talks to their player directly —
-including the encrypted stream payload — and runs as a single POSIX shell
-script with no runtime, no build step and no installer.
-
-Everything happens in the terminal: you search, you pick an anime and an
-episode from a list, and the stream is handed to a local player. Every source it
-knows is searched at once and the answers are merged into one list, so there is
-nothing to choose up front. Only titles that match what you typed are listed,
-and music videos or shows that have not aired yet are left out. The list runs
-oldest first with the release year next to each title, so the series you should
-start with is at the top. Nothing is installed, no account is needed and no
-daemon runs in the background.
+Watch anime in your terminal. Search for a show, pick an episode from a list, and
+it resolves the stream and hands it to your player. One POSIX shell script, no
+account, no config, no daemon.
 
 > **This is a personal project.** It scrapes third party sites. Read
 > [disclaimer.md](disclaimer.md) before using it.
 
-## Dependencies
+## Install
 
-`_nime` checks these itself with `_nime --check-deps`.
+One line, whichever system you are on. It installs `_nime` **and** the programs it
+uses — the menu (`fzf`), the player (`mpv`), downloads (`yt-dlp`, `ffmpeg`) — through
+your own package manager, asking for a password only if it has to.
+
+**Linux, macOS, Termux**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/optimalguyy/_nime/master/install.sh | sh
+```
+
+**Windows** — PowerShell, nothing needs to be installed first
+
+```powershell
+irm https://raw.githubusercontent.com/optimalguyy/_nime/master/install.ps1 | iex
+```
+
+**Arch, CachyOS, Manjaro, EndeavourOS** — pacman owns the files instead
+
+```sh
+git clone https://github.com/optimalguyy/_nime.git && cd _nime && makepkg -si
+```
+
+Then:
+
+```sh
+_nime                        # search for a show
+_nime -d cyberpunk           # download it instead of playing
+_nime -e 1-3 -d cyberpunk    # three episodes at once
+```
+
+On Windows, open a new terminal first so the `PATH` change applies, and start it
+with `nime` rather than `_nime`.
+
+`_nime --check-deps` says what is installed and what is missing. `_nime -U`
+updates, `_nime -h` lists every flag.
+
+## What you need
+
+The installers above handle this. If you would rather do it yourself:
 
 **Required**
 
@@ -48,93 +75,27 @@ macOS and Termux, so a fresh system already has them.
 **No player?** `_nime` still resolves the episode and prints the stream URL,
 the subtitle URL and the required referer, so you can paste them anywhere.
 
-The script itself never touches your system. The one-line installer below is the
-one thing that does, and only to install the programs above that you are
-missing.
+The script itself never touches your system. Only the one-line installer installs
+anything, and only what is missing.
 
-## Install
-
-One line, on any system:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/optimalguyy/_nime/master/install.sh | sh
-```
-
-That copies `_nime` and `_nime-dl` into `~/.local/bin`, tells you how to put
-that folder on your `PATH` if it is not there yet, installs the man page, and
-then installs whatever `_nime` needs that is missing — `fzf`, `mpv`, `yt-dlp`,
-`ffmpeg`, `python3`, `openssl` — through your own package manager (`pacman`,
-`apt`, `dnf`, `zypper`, `apk`, `pkg` on Termux, `brew` on a Mac), asking for your
-password only if it has to.
-
-Run it again later to update, or use `_nime -U`.
-
-### Windows
-
-Windows has no `sh`, so the line above cannot work there. Run this in
-**PowerShell** instead:
-
-```powershell
-irm https://raw.githubusercontent.com/optimalguyy/_nime/master/install.ps1 | iex
-```
-
-Nothing has to be installed beforehand. It sets up Git for Windows — the shell
-`_nime` runs in — plus `fzf`, `mpv`, `yt-dlp` and `ffmpeg` through `winget`
-(which Windows 11 and current Windows 10 already have), puts `_nime` and two
-launchers in `%LOCALAPPDATA%\nime\bin`, and adds that folder to your `PATH`.
-
-Open a new terminal once it finishes, then:
-
-```powershell
-nime cyberpunk
-nime -d -e 1 cyberpunk
-```
-
-If PowerShell will not run a downloaded script, save it first and run the file:
-
-```powershell
-iwr https://raw.githubusercontent.com/optimalguyy/_nime/master/install.ps1 -OutFile install.ps1
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-One difference on Windows: each episode opens its own player window. The
-single-window `next` / `previous` control is a Unix socket, which Windows
-players do not expose.
-
-### Arch, CachyOS, Manjaro, EndeavourOS
-
-The repository carries a `PKGBUILD`, so pacman can own the files:
-
-```sh
-git clone https://github.com/optimalguyy/_nime.git
-cd _nime
-makepkg -si
-```
-
-It builds the package and installs `_nime`, `_nime-dl` and the man page into
-`/usr`, pulling `curl` and `openssl` with it.
-
-### Packages on other systems
-
-The script itself needs only `curl` and `openssl`; a player and a menu make it
-pleasant. One line per system:
+### Packages per system
 
 **Debian, Ubuntu, Mint, Pop!_OS**
 
 ```sh
-sudo apt install curl openssl mpv fzf python3 yt-dlp ffmpeg
+apt install curl openssl mpv fzf python3 yt-dlp ffmpeg
 ```
 
 **Fedora**
 
 ```sh
-sudo dnf install curl openssl mpv fzf python3 yt-dlp ffmpeg
+dnf install curl openssl mpv fzf python3 yt-dlp ffmpeg
 ```
 
 **openSUSE**
 
 ```sh
-sudo zypper install curl openssl mpv fzf python3 yt-dlp ffmpeg
+zypper install curl openssl mpv fzf python3 yt-dlp ffmpeg
 ```
 
 **macOS** (with [Homebrew](https://brew.sh))
@@ -146,8 +107,8 @@ brew install mpv fzf python3 yt-dlp ffmpeg
 `brew install --cask iina` adds IINA, which is used in place of mpv when it is
 installed.
 
-**Windows, Git Bash** ([Git for Windows](https://git-scm.com/download/win), with
-[Scoop](https://scoop.sh))
+**Windows without the installer** ([Git for Windows](https://git-scm.com/download/win),
+with [Scoop](https://scoop.sh))
 
 ```sh
 scoop install mpv fzf python yt-dlp ffmpeg
@@ -177,7 +138,7 @@ install VLC from the App Store and tap it.
 
 ### Doing it by hand
 
-If you would rather not run a script, the two files are all there is:
+The two files are all there is:
 
 ```sh
 git clone https://github.com/optimalguyy/_nime.git
@@ -212,9 +173,9 @@ echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 System wide, for every user on the machine, with the man page:
 
 ```sh
-sudo cp _nime _nime-dl /usr/local/bin/
-sudo cp _nime.1 /usr/local/share/man/man1/
-sudo mandb
+cp _nime _nime-dl /usr/local/bin/
+cp _nime.1 /usr/local/share/man/man1/
+mandb
 ```
 
 ### Check it
