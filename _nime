@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.13"
+version="1.9.14"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -36,6 +36,16 @@ clear_status() {
 	[ "${status_lines:-0}" -gt 0 ] 2>/dev/null || return 0
 	printf '\33[%dA\33[0J' "$status_lines" >&2
 	status_lines=0
+}
+
+# what the audio of the run will be, said on every episode so which track is
+# being asked for is never a guess
+mode_word() {
+	if [ "$mode" = dub ]; then
+		printf 'English dub'
+	else
+		printf 'original audio'
+	fi
 }
 
 # an episode that cannot be found while asking for the dub is a missing dub, and
@@ -1953,8 +1963,8 @@ play() {
 	if [ -n "$_range" ]; then
 		for _i in $_range; do
 			ep_no=$_i
-			info "Playing $(ep_display "$ep_no")..."
-			resolve_episode_any "$ep_no" || die "No sources found for episode $ep_no"
+			info "Playing $(ep_display "$ep_no"), $(mode_word)..."
+			resolve_episode_any "$ep_no" || dub_die "No sources found for episode $ep_no"
 			play_episode
 		done
 		return
@@ -1962,7 +1972,8 @@ play() {
 
 	printf '%s\n' "$ep_list" | grep -qx "$_spec" || die "Invalid episode!"
 	ep_no=$_spec
-				resolve_episode_any "$ep_no" || dub_die "No sources found for episode $ep_no"
+	info "Playing $(ep_display "$ep_no"), $(mode_word)..."
+	resolve_episode_any "$ep_no" || dub_die "No sources found for episode $ep_no"
 	play_episode
 }
 
@@ -2230,7 +2241,7 @@ on_interrupt() {
 }
 trap on_interrupt INT HUP TERM
 
-info "_nime $version"
+info "_nime $version, $(mode_word)"
 
 # ---------------------------------------------------------------------------
 # pick an anime
