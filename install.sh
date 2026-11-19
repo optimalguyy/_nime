@@ -215,8 +215,23 @@ else
 					dpkg --configure -a >/dev/null 2>&1 || true
 				fi
 			fi
+			# a device that has never fetched the package lists cannot resolve any
+			# name, and "Unable to locate package" on a fresh install is that more
+			# often than anything else. Termux says yes to its own mirror question
+			# with -y, and the first update after a new install is the slow one
+			case "$pm" in
+				termux)
+					printf 'updating the package lists (%s)\n' "$pm"
+					if ! _up=$($privileged pkg update -y 2>&1); then
+						# kept, because this is the run that explains a broken Termux
+						printf 'updating the package lists failed:\n'
+						printf '%s\n' "$_up" |
+							grep -iE 'error|E:|unable|signature|unsigned|denied|resolve' | tail -n 4 || true
+					fi
+					;;
+				apt) $privileged apt-get update -qq || true ;;
+			esac
 			printf 'installing:%s (%s)\n' "$missing" "$pm"
-			[ "$pm" = apt ] && { $privileged apt-get update -qq || true; }
 			if [ "$ask" = 1 ]; then
 				$privileged $base $missing </dev/tty || true
 			else
@@ -224,16 +239,38 @@ else
 			fi
 
 			# one unknown name aborts the whole list on apt and dnf, so every
-			# program that is still missing is tried on its own afterwards
+			# program that is still missing is tried on its own afterwards, and
+			# what the package manager said is kept: "still missing" with no reason
+			# is the one message that cannot be acted on
 			for _t in $tools; do
 				command -v "$_t" >/dev/null 2>&1 && continue
 				_p=$(pkg_for "$_t")
+				printf '  %s alone (%s)\n' "$_p" "$pm"
 				if [ "$ask" = 1 ]; then
-					$privileged $base "$_p" </dev/tty >/dev/null 2>&1 || true
+					_err=$($privileged $base "$_p" </dev/tty 2>&1) || true
 				else
-					$privileged $base "$_p" >/dev/null 2>&1 || true
+					_err=$($privileged $base "$_p" 2>&1) || true
+				fi
+				command -v "$_t" >/dev/null 2>&1 && continue
+				_err=$(printf '%s\n' "$_err" |
+					grep -iE 'error|E:|unable|not found|no such|invalid|fail|denied' | tail -n 2 || true)
+				if [ -n "$_err" ]; then
+					printf '  %s\n' "$_err"
 				fi
 			done
+
+			# the one program a package is missing for on some releases. it is
+			# pure python, so pip can put it in the destination on the PATH
+			if [ "$pm" = termux ] && ! command -v yt-dlp >/dev/null 2>&1 && [ ! -x "$dest/yt-dlp" ]; then
+				_py=""
+				command -v python3 >/dev/null 2>&1 && _py=python3
+				[ -z "$_py" ] && command -v python >/dev/null 2>&1 && _py=python
+				if [ -n "$_py" ]; then
+					printf '  yt-dlp alone (pip)\n'
+					$_py -m pip install --user -q yt-dlp >/dev/null 2>&1 ||
+						$_py -m pip install --user -q --break-system-packages yt-dlp >/dev/null 2>&1 || true
+				fi
+			fi
 		fi
 	fi
 
@@ -287,6 +324,12 @@ if [ -n "$left" ]; then
 			printf '\nOn Android the player is an app, which pkg cannot install. VLC is the\n'
 			printf 'one that plays these streams, from the Play Store:\n'
 			printf '  https://play.google.com/store/apps/details?id=org.videolan.vlc\n'
+			# the other reason pkg installs nothing is the app it is running in:
+			# the Play Store build was abandoned in 2020 and its packages are gone
+			printf '\nIf pkg could not install the rest, check where Termux came from. The\n'
+			printf 'Play Store build has been abandoned since 2020 and installs nothing;\n'
+			printf 'the one that works is from F-Droid:\n'
+			printf '  https://f-droid.org/packages/com.termux/\n'
 			;;
 		dnf)
 			printf '\nmpv and the full ffmpeg live in RPM Fusion on older Fedora:\n\n'

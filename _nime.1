@@ -1,4 +1,4 @@
-.TH _NIME 1 "2026-11" "_nime 1.9.20" "User Commands"
+.TH _NIME 1 "2026-11" "_nime 1.9.21" "User Commands"
 .SH NAME
 _nime \- browse and watch anime from the terminal
 .SH SYNOPSIS
@@ -141,9 +141,9 @@ Directory holding the history file. Defaults to
 \fI$XDG_STATE_HOME/_nime\fR.
 .TP
 .B _NIME_DOWNLOAD_DIR
-The downloads folder itself. Defaults to the XDG download dir, \fI~/Downloads\fR,
-\fI~/Desktop\fR or the home directory, whichever exists first. Files are written
-to \fI_nime downloads/<series>/\fR inside it.
+The downloads folder itself. Defaults to the XDG download dir, then
+\fI~/Downloads\fR (created if it does not exist), then \fI~/Desktop\fR or the home
+directory. Files are written to \fI_nime downloads/<series>/\fR inside it.
 .TP
 .B _NIME_SKIP
 Set to \fI1\fR to always skip intros and outros.

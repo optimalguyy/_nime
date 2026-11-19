@@ -145,6 +145,14 @@ only the library, and `_nime` needs the command to decrypt the stream links.
 `pkg install` needs no root and no `sudo` on Termux, and the installer above uses
 it that way.
 
+If `pkg install` answers "Unable to locate package" on a phone that was just set
+up, check where Termux came from: the Play Store build was abandoned in 2020 and
+its package repositories no longer resolve, so nothing installs in it. The build
+that works is the F-Droid one linked above. The installer prints the package
+manager's own message when a package fails, and says this when the repository
+itself is the problem, instead of leaving you with a list of things that are
+still missing and no reason why.
+
 **VLC is the recommended player on Android.** It handles these streams as they
 are; a phone's gallery or stock video player does not, and answers with
 "Can't play this video".
@@ -248,6 +256,37 @@ _nime -U
 
 That downloads the newest copy, compares the version line, and replaces the
 installed file while keeping the old one next to it as `_nime.bak`.
+
+### Remove
+
+One command takes it all back out: the two scripts, a `yt-dlp` copy the
+installer fetched, the man page, the `PATH` lines the installer added, the watch
+history and the cache.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/optimalguyy/_nime/master/uninstall.sh | sh
+```
+
+Downloaded episodes are kept unless you say otherwise — `--all` removes the
+`_nime downloads` folder as well, and `--keep-history` leaves what you were
+watching in place:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/optimalguyy/_nime/master/uninstall.sh | sh -s -- --all
+curl -fsSL https://raw.githubusercontent.com/optimalguyy/_nime/master/uninstall.sh | sh -s -- --keep-history
+```
+
+From a clone, `sh uninstall.sh`. It prints every file it removed and ends with
+the one command that removes the programs the installer installed (`fzf`, `mpv`,
+`ffmpeg`, `yt-dlp`); those are left alone, because something else on the machine
+may be using them. Nothing of `_nime` runs in the background or is registered
+anywhere, so there is nothing else to stop or disable.
+
+If it was installed as a package instead, that is the package manager's job:
+
+```sh
+sudo pacman -Rns _nime          # Arch, from the PKGBUILD
+```
 
 ## Commands
 
@@ -412,16 +451,18 @@ episodes in it.
 ~/Downloads/_nime downloads/Cyberpunk_ Edgerunners/E2.mp4
 ```
 
-The download folder is the first of these that exists, so there is nothing to
-pick:
+The download folder is the first of these, and it is created if it is not there
+yet, so there is nothing to pick and nothing lands in your home directory by
+accident:
 
 1. `_NIME_DOWNLOAD_DIR`, if you set it,
 2. the XDG download dir from `~/.config/user-dirs.dirs`,
-3. `~/Downloads`,
-4. `~/Desktop`,
-5. your home directory.
+3. `~/Downloads` (made if it does not exist),
+4. `~/Download`, then `~/Desktop`,
+5. your home directory, only if none of the above can be created.
 
-On Android that is `/storage/emulated/0/Download/_nime downloads`.
+On Android that is `/storage/emulated/0/Download/_nime downloads`, once
+`termux-setup-storage` has given Termux the shared storage.
 
 Downloads use the audio you asked for — the dubbed track by default, the
 original one with `--sub` — so a downloaded file sounds like the version you

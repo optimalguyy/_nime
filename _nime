@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.20"
+version="1.9.21"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1389,43 +1389,42 @@ update_history() {
 # ---------------------------------------------------------------------------
 
 # the downloads folder itself: the one the desktop uses, so nothing has to be
-# picked. it is the first that exists: an XDG download dir, Downloads, Desktop,
-# otherwise home. _NIME_DOWNLOAD_DIR overrides all of it. the files go into a
-# _nime downloads folder inside it, one folder per series.
+# picked, and made there when it is not there yet, because an episode saved in
+# the home directory is one you have to go looking for. the order is the XDG
+# download dir, Downloads, Desktop, home; _NIME_DOWNLOAD_DIR overrides it all.
+# the files go into a _nime downloads folder inside it, one folder per series.
 download_dir() {
 	if [ -n "$_NIME_DOWNLOAD_DIR" ]; then
+		mkdir -p "$_NIME_DOWNLOAD_DIR" 2>/dev/null
 		printf '%s' "$_NIME_DOWNLOAD_DIR"
 		return
 	fi
 
+	# on Android the phone already has a shared Download folder, and that is the
+	# one the file manager and the gallery list
 	_base=""
 	if [ "$os_id" = android ] && [ -d /storage/emulated/0 ]; then
-		for _c in /storage/emulated/0/Download /storage/emulated/0/Desktop /storage/emulated/0; do
-			[ -d "$_c" ] && {
-				_base=$_c
-				break
-			}
-		done
+		_base=/storage/emulated/0/Download
 	fi
 
 	if [ -z "$_base" ] && [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" ]; then
 		_base=$(sed -n 's|^XDG_DOWNLOAD_DIR="\(.*\)"$|\1|p' \
 			"${XDG_CONFIG_HOME:-$HOME/.config}/user-dirs.dirs" | head -n 1)
 		_base=$(printf '%s' "$_base" | sed "s|^\$HOME|$HOME|")
-		[ -d "$_base" ] || _base=""
 	fi
 
-	if [ -z "$_base" ]; then
-		for _c in "$HOME/Downloads" "$HOME/Desktop" "$HOME/desktop" "$HOME"; do
-			[ -d "$_c" ] && {
-				_base=$_c
-				break
-			}
-		done
-	fi
+	# the first one that is already there or can be created, so a device without
+	# ~/Downloads gets one instead of a download in the home directory
+	for _c in "$_base" "$HOME/Downloads" "$HOME/Download" "$HOME/Desktop" "$HOME/desktop" "$HOME"; do
+		[ -n "$_c" ] || continue
+		mkdir -p "$_c" 2>/dev/null || continue
+		[ -w "$_c" ] || continue
+		printf '%s' "$_c"
+		return
+	
+done
 
-	[ -z "$_base" ] && _base=$(pwd)
-	printf '%s' "$_base"
+	printf '%s' "$HOME"
 }
 
 # one updating line from a yt-dlp progress line: [#####     ]  42.3% 1.2MiB/s
