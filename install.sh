@@ -13,8 +13,22 @@
 set -e
 
 repo="https://raw.githubusercontent.com/optimalguyy/_nime/master"
-dest="${_NIME_DEST:-${HOME}/.local/bin}"
 tmp=""
+
+# where the scripts go. a directory that is already on the PATH is worth more
+# than the usual one: a startup file is read by the next shell, not by the one
+# that is open, and on Termux the home directory's bin is not read at all, which
+# leaves `_nime` as "command not found" right after a successful install
+if [ -n "${_NIME_DEST:-}" ]; then
+	dest=$_NIME_DEST
+elif [ -n "${PREFIX:-}" ] && [ -d "${PREFIX}/bin" ] && [ -w "${PREFIX}/bin" ] &&
+	{ [ -n "${TERMUX_VERSION:-}" ] || [ -n "${ANDROID_ROOT:-}" ]; }; then
+	# Termux keeps everything it installs in $PREFIX/bin, which is on the PATH
+	# of every session: no rc file, no new terminal, it just works
+	dest="${PREFIX}/bin"
+else
+	dest="${HOME}/.local/bin"
+fi
 
 cleanup() {
 	if [ -n "$tmp" ]; then
@@ -49,6 +63,18 @@ mkdir -p "$dest" || {
 }
 cp "$src/_nime" "$src/_nime-dl" "$dest/" || exit 1
 chmod +x "$dest/_nime" "$dest/_nime-dl"
+
+# a copy left in the home directory by an earlier install is the one a shell
+# with that directory on its PATH would find, so it does not stay behind
+if [ "$dest" != "${HOME}/.local/bin" ]; then
+	for _old in _nime _nime-dl; do
+		if [ -e "${HOME}/.local/bin/$_old" ]; then
+			if rm -f "${HOME}/.local/bin/$_old" 2>/dev/null; then
+				printf 'removed the earlier copy %s\n' "${HOME}/.local/bin/$_old"
+			fi
+		fi
+	done
+fi
 
 # the man page, where it can be written without a password
 mandir="${_NIME_MAN_DIR:-${HOME}/.local/share/man/man1}"

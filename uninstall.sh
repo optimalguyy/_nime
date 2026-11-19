@@ -15,7 +15,15 @@
 
 set -e
 
-dest="${_NIME_DEST:-${HOME}/.local/bin}"
+# Termux installs its own programs in $PREFIX/bin, and that is where the
+# installer puts the scripts there
+if [ -n "${_NIME_DEST:-}" ]; then
+	dest=$_NIME_DEST
+elif [ -n "${PREFIX:-}" ] && [ -e "${PREFIX}/bin/_nime" ]; then
+	dest="${PREFIX}/bin"
+else
+	dest="${HOME}/.local/bin"
+fi
 mandir="${_NIME_MAN_DIR:-${HOME}/.local/share/man/man1}"
 histdir="${_NIME_HIST_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/_nime}"
 cachedir="${XDG_CACHE_HOME:-$HOME/.cache}/_nime"
@@ -98,9 +106,14 @@ say ""
 drop "$dest/_nime"
 drop "$dest/_nime-dl"
 drop "$dest/_nime.bak"
+# the same files in the other place an install may have left them
+drop "${HOME}/.local/bin/_nime"
+drop "${HOME}/.local/bin/_nime-dl"
+drop "${HOME}/.local/bin/_nime.bak"
 # a stand-alone yt-dlp the installer fetched lands in the same directory; a
 # yt-dlp from a package manager is somewhere else and is not touched
 drop "$dest/yt-dlp"
+drop "${HOME}/.local/bin/yt-dlp"
 drop "$mandir/_nime.1"
 
 # the PATH lines, by their exact text so nothing else in the file goes

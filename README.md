@@ -143,7 +143,9 @@ pkg install curl openssl-tool mpv fzf python python-yt-dlp ffmpeg termux-am
 only the library, and `_nime` needs the command to decrypt the stream links.
 
 `pkg install` needs no root and no `sudo` on Termux, and the installer above uses
-it that way.
+it that way. It also puts `_nime` where Termux's own programs are
+(`$PREFIX/bin`), which is on the `PATH` of every session — so the command works
+in the terminal that installed it, with nothing to source and no new window.
 
 If `pkg install` answers "Unable to locate package" on a phone that was just set
 up, check where Termux came from: the Play Store build was abandoned in 2020 and
