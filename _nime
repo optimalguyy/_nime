@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.24"
+version="1.9.25"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -247,6 +247,19 @@ check_deps() {
 		done
 		[ -z "$_shared" ] && printf '  no shared storage: termux-setup-storage is needed to play\n'
 	fi
+	# the filter in front of the search results is not a program, which is why it
+	# is checked last: a build where it quietly does nothing shows every row the
+	# source offered, and that looks like the search itself being wrong
+	_probe=$(printf 'a\tChainsaw Man (2022)\tx\na\tEAT-MAN (1997)\tx\n' |
+		relevant_rows 'chainsaw+man' | grep -c 'Chainsaw')
+	_awkv=$(awk -W version 2>/dev/null | head -n 1)
+	[ -z "$_awkv" ] && _awkv=$(awk --version 2>/dev/null | head -n 1)
+	[ -z "$_awkv" ] && _awkv=$(command -v awk 2>/dev/null)
+	if [ "${_probe:-0}" -ge 1 ] 2>/dev/null; then
+		printf 'search:\n  ok       filter (%s)\n' "$_awkv"
+	else
+		printf 'search:\n  BROKEN   filter, %s did not pick the matching row\n' "$_awkv"
+	fi
 	case "$player_function" in
 		'') printf 'player:\n  none found, the stream url will be printed\n' ;;
 		print) printf 'player:\n  none found, the stream url will be printed\n' ;;
@@ -286,6 +299,10 @@ http_get() {
 	_url=$1
 	_ref=$2
 	_xhr=$3
+
+	# _NIME_DEBUG=1 says what is asked for and what came back, which is the one
+	# thing that cannot be seen from the menus
+	[ -n "${_NIME_DEBUG:-}" ] && printf 'debug: GET %s\n' "$_url" >&2
 
 	# which source the url belongs to, so a failure can be remembered against it
 	_side=""
@@ -932,19 +949,30 @@ relevant_rows() {
 # shows up once and nothing has to be chosen up front. each row keeps the id it
 # needs for its own source in field 1 and names that source in field 3
 search_all_sources() {
+	# the query is kept in a variable of its own: it is still needed after two
+	# background jobs and a pipeline, and a positional parameter is the one thing
+	# a shell can change without saying so
+	_sq=$1
+	[ -z "$_sq" ] && return 1
 	_tmp="${TMPDIR:-/tmp}/_nime_search.$$"
 	# the quick search answers with five titles; the filter page behind it has
 	# twenty-eight per page and is what the list is built from, so a search for a
 	# popular show turns up its films and specials too instead of five of them
-	( as_search_all "$1" 2>/dev/null | while IFS="$TAB" read -r _sl _nm _sid; do
+	( as_search_all "$_sq" 2>/dev/null | while IFS="$TAB" read -r _sl _nm _sid; do
 		[ -n "$_sl" ] && printf '%s\t%s\tanimesuge\n' "$_sl" "$_nm"
 	done >"${_tmp}.a" ) &
-	( ac_search "$1" 2>/dev/null | while IFS="$TAB" read -r _id _nm _yr; do
+	( ac_search "$_sq" 2>/dev/null | while IFS="$TAB" read -r _id _nm _yr; do
 		[ -n "$_id" ] && printf '%s\t%s\tanichan\t%s\n' "$_id" "$_nm" "$_yr"
 	done >"${_tmp}.b" ) &
 	wait
 	_all=$(cat "${_tmp}.a" "${_tmp}.b" 2>/dev/null)
-	_pruned=$(printf '%s\n' "$_all" | relevant_rows "$1")
+	# how many real words the query has: a short acronym may match nothing, but
+	# two real words that match nothing is an answer in itself
+	_sqwords=0
+	for _w in $(printf '%s' "$_sq" | tr -c 'A-Za-z0-9' ' '); do
+		[ ${#_w} -ge 3 ] && _sqwords=$((_sqwords + 1))
+	done
+	_pruned=$(printf '%s\n' "$_all" | relevant_rows "$_sq")
 	# a short query like an acronym matches no title at all, so keep the raw
 	# answers rather than showing nothing
 	[ -z "$_pruned" ] && _pruned=$_all
@@ -968,8 +996,9 @@ search_all_sources() {
 	# the title the query names comes first and everything else follows, each
 	# group oldest first: with the whole list now here, sorting by year alone put
 	# an unrelated older show above the one that was asked for
-	cat "${_tmp}".r* 2>/dev/null |
-		awk -F'\t' -v q="$1" '
+	_final=$(
+		cat "${_tmp}".r* 2>/dev/null |
+		awk -F'\t' -v q="$_sq" '
 			BEGIN {
 				f = tolower(q)
 				gsub(/[^a-z0-9]/, "", f)
@@ -992,6 +1021,20 @@ search_all_sources() {
 			label = ($2 == 9999 ? $4 : $4 " (" $2 ")")
 			printf "%s\t%s\t%s\t%s\n", $3, label, $5, $6
 		}'
+	)
+
+	# the same filter once more, on the labels the menu will show: a build where
+	# the first pass quietly did nothing listed every row the source offered, and
+	# catching that here costs one pass over a short list
+	if [ "$_sqwords" -gt 0 ]; then
+		_tight=$(printf '%s\n' "$_final" | relevant_rows "$_sq")
+		[ -n "$_tight" ] && _final=$_tight
+	fi
+	[ -n "${_NIME_DEBUG:-}" ] &&
+		printf 'debug: query=[%s] words=%s raw=%s shown=%s\n' "$_sq" "$_sqwords" \
+			"$(printf '%s\n' "$_all" | grep -c .)" \
+			"$(printf '%s\n' "$_final" | grep -c .)" >&2
+	printf '%s\n' "$_final"
 	rm -f "${_tmp}.a" "${_tmp}.b" "${_tmp}.in" "${_tmp}".r*
 }
 
