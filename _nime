@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.23"
+version="1.9.24"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -367,12 +367,17 @@ nth() {
 	if [ "$menu_program" = fzf ]; then
 		# no --height: fzf takes over the whole terminal on its own screen and
 		# hands it back on exit, so the menu feels like its own window
+		# the version sits in the header: which build made this list was
+		# otherwise a guess, and a list that looks wrong is usually a copy that
+		# was never updated
 		if [ -n "$_multi" ]; then
 			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
-				--with-nth=2 -m $menu_extra_flags --prompt "$_prompt > "
+				--with-nth=2 -m $menu_extra_flags --header "_nime $version" \
+				--prompt "$_prompt > "
 		else
 			printf '%s\n' "$_list" | fzf --reverse --no-sort --delimiter="$TAB" \
-				--with-nth=2 $menu_extra_flags --prompt "$_prompt > "
+				--with-nth=2 $menu_extra_flags --header "_nime $version" \
+				--prompt "$_prompt > "
 		fi
 		return
 	fi
