@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.26"
+version="1.9.27"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1387,6 +1387,24 @@ resolve_episode() {
 		select_quality "$quality"
 	fi
 	[ -z "$video_link" ] && return 1
+
+	# the cdn hides its pieces behind names it picks at random (.jpg, .js, .css),
+	# and a player judges a piece by that name instead of by what it holds, so a
+	# stream like that is played through the local proxy, which gives every piece
+	# the name of the format it really is
+	_need_proxy=0
+	_pieces=$_playlist
+	if printf '%s\n' "$_pieces" | grep -q 'EXT-X-STREAM-INF'; then
+		_first_piece=$(printf '%s\n' "$_pieces" | grep -vE '^#|^$' | head -n 1)
+		case "$_first_piece" in
+			http*) ;;
+			*) _first_piece="${_m3u8%/*}/$_first_piece" ;;
+		esac
+		_pieces=$(http_get "$_first_piece" "$refr")
+	fi
+	printf '%s\n' "$_pieces" | grep -vE '^#|^$' |
+		grep -qvE '\.(ts|m4s|mp4|aac|vtt|webvtt|key|mp3)([?#]|$)' && _need_proxy=1
+
 	info "Stream ready"
 }
 
@@ -1810,7 +1828,7 @@ android_store() {
 # headers through an intent, so the app is given a local address that sends them
 # for it: a small proxy in this session fetches the playlist and every segment
 # with the referrer, and VLC just plays what it is handed
-android_proxy_start() {
+proxy_start() {
 	command -v python3 >/dev/null 2>&1 || return 1
 	_s="${TMPDIR:-/tmp}/_nime-proxy.py"
 	cat >"$_s" <<'PY'
@@ -1833,9 +1851,19 @@ def dec(payload):
         return ""
 
 
+SEGMENT_EXTS = (".ts", ".m4s", ".mp4", ".m3u8", ".aac", ".vtt", ".webvtt",
+                ".key", ".mp3", ".mkv")
+
+
 def proxied(base, ref):
     target = urllib.parse.urljoin(base, ref)
-    ext = os.path.splitext(urllib.parse.urlparse(target).path)[1] or ".bin"
+    # the cdn names its pieces after anything it likes (.jpg, .js, .css, ...), and
+    # a player then judges them by that name instead of by their content and
+    # refuses the stream, so every piece leaves here under the name of the format
+    # it actually is: an mpeg-ts piece is a .ts, whatever it was called before
+    ext = os.path.splitext(urllib.parse.urlparse(target).path)[1].lower()
+    if ext not in SEGMENT_EXTS:
+        ext = ".ts"
     return "/p/x" + ext + "?u=" + enc(target)
 
 
@@ -1961,8 +1989,8 @@ PY
 	return 1
 }
 
-android_watch_url() {
-	_p=$(android_proxy_start) || return 1
+watch_url_via_proxy() {
+	_p=$(proxy_start) || return 1
 	_enc=$(printf '%s' "$video_link" | openssl base64 -A | tr '+/' '-_' | tr -d '=')
 	[ -n "$_enc" ] || return 1
 	_watch_url="http://127.0.0.1:$_p/p/x.m3u8?u=$_enc&l=${audio_lang_short:-en}"
@@ -1994,34 +2022,39 @@ android_vlc_playlist() {
 # android_play_vlc -> VLC has the episode
 # the app is asked to open it rather than looked up in a list: that is the same
 # question, and it cannot be answered wrong by a missing pm
-android_play_vlc() {
-	# the proxy is the one that works: it sends the headers the app cannot
-	if android_watch_url; then
-		_out=$(am start --user 0 -a android.intent.action.VIEW -d "$_watch_url" \
-			-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
-			-e "title" "$anime_title $ep_label" 2>&1)
-		case "$_out" in
-			*"Error"* | *"Exception"* | *"not found"*) : ;;
-			*) return 0 ;;
-		esac
-	fi
-	_pl=$(android_vlc_playlist) && [ -n "$_pl" ] && {
-		_out=$(am start --user 0 -a android.intent.action.VIEW -d "file://$_pl" \
-			-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
-			-e "title" "$anime_title $ep_label" 2>&1)
-		case "$_out" in
-			*"Error"* | *"Exception"* | *"not found"*) : ;;
-			*) return 0 ;;
-		esac
-	}
-	# no shared folder to write the playlist into: the bare link still opens, and
-	# the player is the one that will refuse it if the stream insists on headers
-	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
+# android_open_vlc <url> -> VLC was handed the url, whatever its version calls the
+# window it plays in
+android_open_vlc() {
+	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$1" \
 		-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
 		-e "title" "$anime_title $ep_label" 2>&1)
 	case "$_out" in
+		*"Error"* | *"Exception"* | *"not found"*) : ;;
+		*) return 0 ;;
+	esac
+	# a version that renamed that window would answer the named one with "does
+	# not exist", so the app itself is asked before it is written off
+	_out=$(am start --user 0 -a android.intent.action.VIEW -d "$1" \
+		-p org.videolan.vlc -e "title" "$anime_title $ep_label" 2>&1)
+	case "$_out" in
 		*"Error"* | *"Exception"* | *"not found"*) return 1 ;;
 	esac
+	return 0
+}
+
+android_play_vlc() {
+	# the proxy is the one that works: it sends the headers the app cannot, and
+	# it names every piece after the format it really is
+	if [ "$_proxied" = 1 ] && [ -n "$_watch_url" ]; then
+		android_open_vlc "$_watch_url" && return 0
+	elif watch_url_via_proxy; then
+		android_open_vlc "$_watch_url" && return 0
+	fi
+	_pl=$(android_vlc_playlist) && [ -n "$_pl" ] &&
+		android_open_vlc "file://$_pl" && return 0
+	# no shared folder to write the playlist into: the bare link still opens, and
+	# the player is the one that will refuse it if the stream insists on headers
+	android_open_vlc "$video_link" || return 1
 	warn "Storage is not set up, so the referrer the stream needs could not be sent"
 	warn "Run termux-setup-storage once and try again"
 	return 0
@@ -2052,6 +2085,15 @@ android_mpv() {
 play_episode() {
 	ep_label=$(ep_display "$ep_no")
 
+	# what the player is handed: the stream itself, or the local proxy in front
+	# of it when its pieces carry names a player would refuse
+	_direct_link=$video_link
+	_proxied=0
+	if [ "$_need_proxy" = 1 ] && watch_url_via_proxy; then
+		video_link=$_watch_url
+		_proxied=1
+	fi
+
 	# mpv takes the next episode in the window it already has open
 	case "$player_function" in
 		*mpv*) player_ipc_setup ;;
@@ -2066,7 +2108,7 @@ play_episode() {
 		player_cmd "{\"command\":[\"loadfile\",\"$(json_escape "$video_link")\",\"replace\"]}"
 		[ -n "$sub_link" ] && player_cmd "{\"command\":[\"sub-add\",\"$(json_escape "$sub_link")\",\"select\"]}"
 		clear_status
-		replay="$video_link"
+		replay="$_direct_link"
 		unset video_link
 		update_history
 		return
@@ -2077,6 +2119,7 @@ play_episode() {
 	[ "$player_ipc" = 1 ] && [ -n "$player_sock" ] && _ipc_flag="--input-ipc-server=$player_sock"
 
 	if [ "$player_function" = download ]; then
+		video_link=$_direct_link
 		download_video
 		unset video_link
 		return
@@ -2086,6 +2129,7 @@ play_episode() {
 
 	case "$player_function" in
 		print)
+			video_link=$_direct_link
 			print_stream
 			unset video_link
 			update_history
@@ -2097,10 +2141,12 @@ play_episode() {
 			fi
 			;;
 		android_vlc)
-			if need_am; then
-				nohup am start --user 0 -a android.intent.action.VIEW -d "$video_link" \
-					-n org.videolan.vlc/org.videolan.vlc.gui.video.VideoPlayerActivity \
-					-e "title" "$anime_title $ep_label" $player_extra_flags >/dev/null 2>&1 &
+			# the name is the same as the default one on purpose: a stream that
+			# needs the referrer cannot be opened with a bare link, and a launch
+			# that fails has to say so instead of leaving the terminal quiet
+			if need_am && ! android_play_vlc; then
+				warn "VLC did not open the episode"
+				printf '\n%s\n' "$video_link"
 			fi
 			;;
 		*flatpak*mpv*)
@@ -2181,7 +2227,7 @@ play_episode() {
 	# iSH is the exception: its branch prints a link the user has to tap
 	[ "$player_function" = iSH ] || clear_status
 
-	replay="$video_link"
+	replay="$_direct_link"
 	unset video_link
 	update_history
 }
