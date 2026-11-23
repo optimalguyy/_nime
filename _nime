@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.28"
+version="1.9.29"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -95,7 +95,9 @@ help_info() {
 	  -D, --delete      Delete history
 	  -e, --episode     Specify the episode or a range (e.g. 5 or 1-3)
 	  -r, --range       Same as --episode
-	  -q, --quality     Specify the video quality (best, worst, 1080, 720, ...)
+	  -q, --quality     Specify the video quality (best, worst, 1080, 720, ...);
+	                    on a phone best stops at a rendition the line can carry,
+	                    -q 1080 asks for the top one anyway
 	  -S, --select-nth  Select the nth entry without opening a menu
 	  -v, --vlc         Use VLC to play the video
 	  -V, --version     Show the version of the script
@@ -1365,6 +1367,7 @@ resolve_episode() {
 	[ -z "$links" ] && links="direct >$_m3u8"
 
 	stream_flags=""
+	_bw=""
 	if printf '%s' "$_playlist" | grep -q 'EXT-X-MEDIA:TYPE=AUDIO'; then
 		# the variants hold picture only and the master names the audio
 		# renditions beside them, so playing a variant alone is silent: give the
@@ -1404,6 +1407,19 @@ resolve_episode() {
 	fi
 	printf '%s\n' "$_pieces" | grep -vE '^#|^$' |
 		grep -qvE '\.(ts|m4s|mp4|aac|vtt|webvtt|key|mp3)([?#]|$)' && _need_proxy=1
+
+	# what the line is asked to carry: a phone that opens on the biggest
+	# rendition spends the episode loading behind the picture, so a stream
+	# without a quality asked for stops at one a phone can keep up with. -q
+	# still picks any rendition by name
+	_cap=0
+	if [ "$_need_proxy" = 1 ]; then
+		case "$quality" in
+			best | '') [ "$os_id" = android ] && _cap=3500 ;;
+			worst) _cap=1 ;;
+			*) [ -n "${_bw:-}" ] && _cap=$((_bw / 1000)) ;;
+		esac
+	fi
 
 	info "Stream ready"
 }
@@ -1832,13 +1848,14 @@ proxy_start() {
 	command -v python3 >/dev/null 2>&1 || return 1
 	_s="${TMPDIR:-/tmp}/_nime-proxy.py"
 	cat >"$_s" <<'PY'
-import base64, collections, os, re, sys, socketserver, urllib.parse, urllib.request
+import base64, collections, http.client, os, re, sys, socketserver, threading
+import urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler
 
 # bumped whenever this proxy changes in a way a running copy would not have;
 # the script asks for it, so an old copy left running is replaced instead of
 # quietly answering with the behaviour of the version before
-BUILD = "1"
+BUILD = "2"
 
 REF = sys.argv[1] if len(sys.argv) > 1 else ""
 UA = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -1878,6 +1895,59 @@ types = {".ts": "video/mp2t", ".m4s": "video/iso.segment",
          ".mp4": "video/mp4", ".aac": "audio/aac",
          ".vtt": "text/vtt", ".webvtt": "text/vtt",
          ".key": "application/octet-stream"}
+
+local = threading.local()
+
+
+def open_url(url):
+    """GET on a connection that is kept for the next piece of the same host.
+
+    A fresh TLS handshake and a fresh slow start for every piece is most of what
+    a phone line loses while an episode is playing, and that loss is what makes
+    the stream arrive slower than it is watched."""
+    parts = urllib.parse.urlsplit(url)
+    key = (parts.scheme, parts.netloc)
+    conn = getattr(local, "conn", None)
+    if conn is not None and getattr(local, "key", None) != key:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        conn = None
+    path = parts.path + (("?" + parts.query) if parts.query else "")
+    headers = {"User-Agent": UA or "Mozilla/5.0", "Referer": REF,
+               "Accept-Encoding": "identity"}
+    for attempt in (0, 1):
+        fresh = conn is None
+        if fresh:
+            maker = (http.client.HTTPSConnection if parts.scheme == "https"
+                     else http.client.HTTPConnection)
+            conn = maker(parts.netloc, timeout=30)
+            local.conn = conn
+            local.key = key
+        try:
+            conn.request("GET", path, headers=headers)
+            resp = conn.getresponse()
+            if resp.status in (301, 302, 303, 307, 308):
+                where = resp.getheader("Location")
+                resp.read()
+                if not where:
+                    raise IOError("redirect without a target")
+                return open_url(urllib.parse.urljoin(url, where))
+            if resp.status >= 400:
+                resp.read()
+                raise IOError("status %d" % resp.status)
+            return resp
+        except Exception:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            local.conn = None
+            conn = None
+            if fresh or attempt == 1:
+                raise
+
 
 # a piece the player has already asked for is kept for a while: seeking back or
 # replaying then costs nothing, and a player that asks twice does not wait twice
@@ -1945,15 +2015,13 @@ class Handler(BaseHTTPRequestHandler):
         if kept is not None:
             self.send_piece(kept)
             return
-        request = urllib.request.Request(
-            url, headers={"User-Agent": UA or "Mozilla/5.0", "Referer": REF})
         try:
-            upstream = urllib.request.urlopen(request, timeout=30)
+            upstream = open_url(url)
             head = upstream.read(16)
         except Exception:
             self.send_error(502)
             return
-        ctype = (upstream.headers.get("Content-Type") or "").lower()
+        ctype = (upstream.getheader("Content-Type") or "").lower()
         if "mpegurl" in ctype or head[:7] == b"#EXTM3U":
             try:
                 data = head + upstream.read()
@@ -1965,6 +2033,35 @@ class Handler(BaseHTTPRequestHandler):
             # a stream can carry every audio language and mark the original as
             # the default, which is what a player then plays; only the one this
             # run asked for is kept, and it is made the default
+            # a phone cannot carry every rendition the cdn offers, and a player
+            # that starts on the biggest one spends the episode stuttering, so a
+            # master is handed over with only what the line can carry
+            try:
+                cap = int(urllib.parse.parse_qs(
+                    urllib.parse.urlparse(self.path).query).get("b", ["0"])[0])
+            except ValueError:
+                cap = 0
+            if cap > 0 and "#EXT-X-STREAM-INF" in text:
+                offered = [int(m.group(1)) // 1000 for m in
+                           (re.search(r"BANDWIDTH=(\d+)", line) for line in
+                            text.splitlines() if "#EXT-X-STREAM-INF" in line) if m]
+                # never drop everything: the smallest one is the floor
+                if offered:
+                    cap = max(cap, min(offered))
+                trimmed = []
+                drop_uri = False
+                for line in text.splitlines():
+                    if drop_uri and line.strip() and not line.strip().startswith("#"):
+                        drop_uri = False
+                        continue
+                    drop_uri = False
+                    if "#EXT-X-STREAM-INF" in line:
+                        m = re.search(r"BANDWIDTH=(\d+)", line)
+                        if m and int(m.group(1)) // 1000 > cap:
+                            drop_uri = True
+                            continue
+                    trimmed.append(line)
+                text = "\n".join(trimmed)
             want = self.lang()
             if want and "#EXT-X-MEDIA" in text:
                 kept = None
@@ -2003,7 +2100,7 @@ class Handler(BaseHTTPRequestHandler):
         # before sending its first byte made a phone wait seconds for something
         # it wanted in a fraction of that, and the player gave up on it
         try:
-            size = int(upstream.headers.get("Content-Length"))
+            size = int(upstream.getheader("Content-Length"))
         except (TypeError, ValueError):
             size = None
         self.send_response(200)
@@ -2045,7 +2142,7 @@ PY
 	[ -s "$_s" ] || return 1
 	# the proxy has to outlive the terminal while the player is in front
 	command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock >/dev/null 2>&1
-	_proxy_build="ok 1"
+	_proxy_build="ok 2"
 	_portfile="${TMPDIR:-/tmp}/_nime-proxy.port"
 	if [ -f "$_portfile" ]; then
 		read -r _p _pid <"$_portfile" 2>/dev/null
@@ -2086,7 +2183,7 @@ watch_url_via_proxy() {
 	_p=$(proxy_start) || return 1
 	_enc=$(printf '%s' "$video_link" | openssl base64 -A | tr '+/' '-_' | tr -d '=')
 	[ -n "$_enc" ] || return 1
-	_watch_url="http://127.0.0.1:$_p/p/x.m3u8?u=$_enc&l=${audio_lang_short:-en}"
+	_watch_url="http://127.0.0.1:$_p/p/x.m3u8?u=$_enc&l=${audio_lang_short:-en}&b=${_cap:-0}"
 }
 
 # android_vlc_playlist -> a playlist holding the stream and the referrer
