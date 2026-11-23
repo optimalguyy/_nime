@@ -12,7 +12,7 @@
 # Foundation, either version 3 of the License, or (at your option) any later
 # version.
 
-version="1.9.27"
+version="1.9.28"
 
 # ---- set this after you fork/upload the repo, it powers `_nime -U` ----------
 repo_user="${_NIME_USER:-optimalguyy}"
@@ -1832,8 +1832,13 @@ proxy_start() {
 	command -v python3 >/dev/null 2>&1 || return 1
 	_s="${TMPDIR:-/tmp}/_nime-proxy.py"
 	cat >"$_s" <<'PY'
-import base64, os, re, sys, socketserver, urllib.parse, urllib.request
+import base64, collections, os, re, sys, socketserver, urllib.parse, urllib.request
 from http.server import BaseHTTPRequestHandler
+
+# bumped whenever this proxy changes in a way a running copy would not have;
+# the script asks for it, so an old copy left running is replaced instead of
+# quietly answering with the behaviour of the version before
+BUILD = "1"
 
 REF = sys.argv[1] if len(sys.argv) > 1 else ""
 UA = sys.argv[2] if len(sys.argv) > 2 else ""
@@ -1867,6 +1872,39 @@ def proxied(base, ref):
     return "/p/x" + ext + "?u=" + enc(target)
 
 
+# the cdn answers pieces with whatever it likes, image/jpeg included, so the
+# type comes from the name this proxy gave the piece instead
+types = {".ts": "video/mp2t", ".m4s": "video/iso.segment",
+         ".mp4": "video/mp4", ".aac": "audio/aac",
+         ".vtt": "text/vtt", ".webvtt": "text/vtt",
+         ".key": "application/octet-stream"}
+
+# a piece the player has already asked for is kept for a while: seeking back or
+# replaying then costs nothing, and a player that asks twice does not wait twice
+cache = collections.OrderedDict()
+cache_bytes = 0
+CACHE_MAX = 48 * 1024 * 1024
+
+
+def cache_get(url):
+    body = cache.get(url)
+    if body is not None:
+        cache.move_to_end(url)
+    return body
+
+
+def cache_put(url, body):
+    global cache_bytes
+    if len(body) > CACHE_MAX // 4:
+        return
+    if url not in cache:
+        cache_bytes += len(body)
+    cache[url] = body
+    while cache_bytes > CACHE_MAX:
+        _, old = cache.popitem(last=False)
+        cache_bytes -= len(old)
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -1881,9 +1919,18 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         return (query.get("l", [""])[0] or "")[:2].lower()
 
+    def send_piece(self, body, name=None):
+        suffix = os.path.splitext(name or urllib.parse.urlparse(self.path).path)[1].lower()
+        self.send_response(200)
+        self.send_header("Content-Type", types.get(suffix, "application/octet-stream"))
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+
     def handle_one(self):
         if self.path == "/health":
-            body = b"ok"
+            body = ("ok " + BUILD).encode()
             self.send_response(200)
             self.send_header("Content-Type", "text/plain")
             self.send_header("Content-Length", str(len(body)))
@@ -1894,16 +1941,26 @@ class Handler(BaseHTTPRequestHandler):
         if not url:
             self.send_error(404)
             return
+        kept = cache_get(url)
+        if kept is not None:
+            self.send_piece(kept)
+            return
         request = urllib.request.Request(
             url, headers={"User-Agent": UA or "Mozilla/5.0", "Referer": REF})
         try:
             upstream = urllib.request.urlopen(request, timeout=30)
-            data = upstream.read()
+            head = upstream.read(16)
         except Exception:
             self.send_error(502)
             return
         ctype = (upstream.headers.get("Content-Type") or "").lower()
-        if "mpegurl" in ctype or data[:7] == b"#EXTM3U":
+        if "mpegurl" in ctype or head[:7] == b"#EXTM3U":
+            try:
+                data = head + upstream.read()
+            except Exception:
+                self.send_error(502)
+                return
+            upstream.close()
             text = data.decode("utf-8", "replace")
             # a stream can carry every audio language and mark the original as
             # the default, which is what a player then plays; only the one this
@@ -1942,17 +1999,40 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        # the cdn answers segments with whatever it likes, image/jpeg included,
-        # so the type comes from the name this proxy gave the piece instead
-        suffix = os.path.splitext(urllib.parse.urlparse(self.path).path)[1].lower()
-        types = {".ts": "video/mp2t", ".m4s": "video/iso.segment",
-                 ".mp4": "video/mp4", ".aac": "audio/aac",
-                 ".vtt": "text/vtt", ".key": "application/octet-stream"}
+        # a piece is handed on while it still arrives. Reading a whole piece
+        # before sending its first byte made a phone wait seconds for something
+        # it wanted in a fraction of that, and the player gave up on it
+        try:
+            size = int(upstream.headers.get("Content-Length"))
+        except (TypeError, ValueError):
+            size = None
         self.send_response(200)
-        self.send_header("Content-Type", types.get(suffix, "application/octet-stream"))
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Content-Type",
+                         types.get(os.path.splitext(
+                             urllib.parse.urlparse(self.path).path)[1].lower(),
+                             "application/octet-stream"))
+        if size is None:
+            # no length from the cdn: the end of the body is the end of the reply
+            self.send_header("Connection", "close")
+            self.close_connection = True
+        else:
+            self.send_header("Content-Length", str(size))
         self.end_headers()
-        self.wfile.write(data)
+        if self.command == "HEAD":
+            upstream.close()
+            return
+        whole = head
+        piece = head
+        try:
+            while piece:
+                self.wfile.write(piece)
+                piece = upstream.read(65536)
+                whole += piece
+        except Exception:
+            return
+        finally:
+            upstream.close()
+        cache_put(url, whole)
 
     do_GET = handle_one
     do_HEAD = handle_one
@@ -1965,21 +2045,34 @@ PY
 	[ -s "$_s" ] || return 1
 	# the proxy has to outlive the terminal while the player is in front
 	command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock >/dev/null 2>&1
+	_proxy_build="ok 1"
 	_portfile="${TMPDIR:-/tmp}/_nime-proxy.port"
 	if [ -f "$_portfile" ]; then
-		_p=$(cat "$_portfile" 2>/dev/null)
-		if [ -n "$_p" ] && curl -fsS --max-time 2 "http://127.0.0.1:$_p/health" >/dev/null 2>&1; then
-			printf '%s' "$_p"
-			return 0
+		read -r _p _pid <"$_portfile" 2>/dev/null
+		if [ -n "$_p" ]; then
+			# a proxy of an older build answers as well, and it would keep the
+			# behaviour of that older build alive, so the build is asked for and
+			# not just an answer
+			if [ "$(curl -fsS --max-time 2 "http://127.0.0.1:$_p/health" 2>/dev/null)" = "$_proxy_build" ]; then
+				printf '%s' "$_p"
+				return 0
+			fi
+			# only the process that was recorded and is still this proxy is stopped
+			if [ -n "$_pid" ] && grep -qa '_nime-proxy.py' "/proc/$_pid/cmdline" 2>/dev/null; then
+				kill "$_pid" 2>/dev/null
+				sleep 0.5
+			fi
 		fi
+		rm -f "$_portfile"
 	fi
 	for _p in 8770 8771 8772 8773 8774 8775; do
 		python3 "$_s" "$refr" "$agent" "$_p" >/dev/null 2>&1 &
+		_pid=$!
 		_i=0
 		while [ "$_i" -lt 15 ]; do
 			sleep 0.2
-			if curl -fsS --max-time 1 "http://127.0.0.1:$_p/health" >/dev/null 2>&1; then
-				printf '%s' "$_p" >"$_portfile"
+			if [ "$(curl -fsS --max-time 1 "http://127.0.0.1:$_p/health" 2>/dev/null)" = "$_proxy_build" ]; then
+				printf '%s %s' "$_p" "$_pid" >"$_portfile"
 				printf '%s' "$_p"
 				return 0
 			fi
